@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'package:lottie/lottie.dart';
 import '../widgets/intro_components.dart'; // Import các widget đã tách
+import 'home_screen.dart';
 
 class ProfessionalIntroScreen extends StatefulWidget {
   const ProfessionalIntroScreen({super.key});
@@ -28,6 +29,39 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
   void dispose() {
     _lottieController.dispose();
     super.dispose();
+  }
+
+  Widget _buildActionButton({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          color: Colors.grey[850],
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: color.withOpacity(0.5), width: 1.5),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 36),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -107,25 +141,37 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
                       Opacity(
                         opacity: uiOpacity,
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            Transform.translate(offset: Offset(-_scrollProgress * 600, 0), child: const CustomIconButton(icon: Icons.lock_outline_rounded)),
-                            Transform.translate(offset: Offset(-_scrollProgress * 300, 0), child: const CustomIconButton(icon: Icons.lock_open_rounded)),
-                            Transform.translate(offset: Offset(0, _scrollProgress * 600), child: const CustomIconButton(icon: Icons.lightbulb_outline_rounded)), 
-                            Transform.translate(offset: Offset(_scrollProgress * 300, 0), child: const CustomIconButton(icon: Icons.search_rounded)),
-                            Transform.translate(offset: Offset(_scrollProgress * 600, 0), child: const CustomIconButton(icon: Icons.ac_unit_rounded)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      
-                      Opacity(
-                        opacity: uiOpacity,
-                        child: Row(
-                          children: [
-                            Transform.translate(offset: Offset(-_scrollProgress * 600, 0), child: const DemoCard(icon: Icons.library_books_outlined, title: "Book Finder", subtitle: "Library Main Hall")),
+                            Expanded(
+                              child: Transform.translate(
+                                offset: Offset(-_scrollProgress * 600, 0),
+                                child: _buildActionButton(
+                                  title: "Nhập NFC",
+                                  icon: Icons.nfc_rounded,
+                                  color: Colors.blueAccent,
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => const HomeScreen()),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
                             const SizedBox(width: 15),
-                            Transform.translate(offset: Offset(_scrollProgress * 600, 0), child: const DemoCard(icon: Icons.satellite_alt_rounded, title: "AI Scanner", subtitle: "Remote Recognition")),
+                            Expanded(
+                              child: Transform.translate(
+                                offset: Offset(_scrollProgress * 600, 0),
+                                child: _buildActionButton(
+                                  title: "Đăng ký",
+                                  icon: Icons.app_registration_rounded,
+                                  color: Colors.greenAccent,
+                                  onTap: () {
+                                    // TODO: Xử lý đăng ký
+                                  },
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
