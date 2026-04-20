@@ -58,3 +58,6 @@ app.*.map.json
 *.xcuserstate
 
 .env*
+sql-smartlib.txt
+*.sql
+
