@@ -5,7 +5,7 @@ import '../data/models/book.dart';
 class ApiService {
   // Thay đổi URL tùy thuộc vào môi trường chạy.
   // Dùng 10.0.2.2 cho Android Emulator, hoặc 127.0.0.1 cho iOS Simulator / Windows web.
-  static const String baseUrl = 'http://127.0.0.1:8000';
+  static const String baseUrl = 'https://smartlib-be.onrender.com';
 
   Future<List<Book>> fetchBooks() async {
     try {
