@@ -14,11 +14,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late Future<List<Book>> _booksFuture;
   late TabController _tabController;
 
+  void _loadBooks() {
+    setState(() {
+      _booksFuture = _apiService.fetchBooks();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _booksFuture = _apiService.fetchBooks();
+    _loadBooks();
   }
 
   @override
@@ -30,9 +36,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFFFF7DD), // Nền kem sáng
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4A708B), // Màu theo mẫu
+        backgroundColor: const Color(0xFF80A1BA), // Màu Slate Blue
         elevation: 0,
         title: const Text(
           "Library",
@@ -68,7 +74,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 color: Colors.white, // Indicator màu trắng như mẫu
               ),
               indicatorSize: TabBarIndicatorSize.tab,
-              labelColor: const Color(0xFF4A708B),
+              labelColor: const Color(0xFF80A1BA), // Chữ Slate Blue khi được chọn
               unselectedLabelColor: Colors.white,
               dividerColor: Colors.transparent,
               labelPadding: const EdgeInsets.symmetric(horizontal: 20),
@@ -115,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4A708B),
+              backgroundColor: const Color(0xFF91C4C3), // Màu Teal
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
               elevation: 2,
@@ -261,7 +267,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFF4A708B),
+            color: const Color(0xFF91C4C3), // Màu Teal
             borderRadius: BorderRadius.circular(4),
           ),
           alignment: Alignment.center,
@@ -280,32 +286,46 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       future: _booksFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFF4A708B)));
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF91C4C3)));
         } else if (snapshot.hasError) {
+          final errMsg = snapshot.error.toString();
+          final isColdStart = errMsg.contains('Failed to fetch') || errMsg.contains('TimeoutException');
           return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 60),
-                const SizedBox(height: 15),
-                Text(
-                  snapshot.error.toString(),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.grey, fontSize: 16),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _booksFuture = _apiService.fetchBooks();
-                    });
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4A708B)),
-                  child: const Text("Thử lại"),
-                )
-              ],
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    isColdStart ? Icons.cloud_off_rounded : Icons.error_outline_rounded,
+                    color: const Color(0xFF91C4C3),
+                    size: 64,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    isColdStart
+                        ? 'Server đang khởi động...\nVui lòng thử lại sau vài giây.'
+                        : errMsg,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Color(0xFF80A1BA), fontSize: 16, height: 1.5),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: _loadBooks,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Thử kết nối lại'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF91C4C3),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
+
         } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const Center(
             child: Text("Không có sách nào.", style: TextStyle(color: Colors.black54)),

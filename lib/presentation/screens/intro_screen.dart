@@ -43,9 +43,16 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 20),
         decoration: BoxDecoration(
-          color: Colors.grey[850],
+          color: Colors.white,
           borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: color.withOpacity(0.5), width: 1.5),
+          border: Border.all(color: color, width: 2.0),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ]
         ),
         child: Column(
           children: [
@@ -53,8 +60,8 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
             const SizedBox(height: 12),
             Text(
               title,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: color,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -67,9 +74,8 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
 
   @override
   Widget build(BuildContext context) {
-    double uiOpacity = (1.0 - (_scrollProgress * 3)).clamp(0.0, 1.0);
-
     return Scaffold(
+      backgroundColor: const Color(0xFFFFF7DD),
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onVerticalDragUpdate: (details) {
@@ -79,13 +85,20 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
             _lottieController.value = _scrollProgress / math.pi;
           });
         },
-        child: Stack(
-          children: [
+        child: AnimatedBuilder(
+          animation: _lottieController,
+          builder: (context, child) {
+            double combinedProgress = math.max(_scrollProgress / math.pi, _lottieController.value);
+            double uiOpacity = (1.0 - (combinedProgress * 1.5)).clamp(0.0, 1.0);
+            double spreadOffset = combinedProgress * 1000;
+
+            return Stack(
+              children: [
             // --- a. SÁCH LOTTIE 3D ---
             Align(
               alignment: const Alignment(0, -0.2),
               child: Transform.scale(
-                scale: 1.0 + ((_scrollProgress / math.pi) * 2.0), 
+                scale: 1.0 + (combinedProgress * 2.0) + (_lottieController.value * 20.0),
                 child: SizedBox(
                   width: 300, 
                   height: 300,
@@ -102,25 +115,22 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
 
             // --- b. GIAO DIỆN TẢN RA 4 PHƯƠNG ---
             Positioned.fill(
-              child: Opacity(
-                opacity: (1.0 - (_scrollProgress / (0.7 * math.pi))).clamp(0.0, 1.0),
-                child: Padding(
+              child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 80, 20, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Transform.translate(offset: Offset(0, -_scrollProgress * 600), child: Opacity(opacity: uiOpacity, child: const IntroHeader())),
                       const SizedBox(height: 30),
                       
                       Transform.translate(
-                        offset: Offset(-_scrollProgress * 600, 0),
+                        offset: Offset(-spreadOffset, 0),
                         child: Opacity(
                           opacity: uiOpacity,
                           child: const Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text("SMARTLIB", style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white, height: 1.0)),
-                              Text("SYSTEM ONLINE", style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                              Text("SMARTLIB", style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Color(0xFF80A1BA), height: 1.0)),
+                              Text("SYSTEM ONLINE", style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Color(0xFF91C4C3))),
                             ],
                           ),
                         ),
@@ -128,13 +138,13 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
                       
                       const SizedBox(height: 220), 
                       Transform.translate(
-                        offset: Offset(_scrollProgress * 600, 0),
-                        child: Opacity(opacity: uiOpacity, child: const Text("Updated from library core just now", style: TextStyle(color: Colors.grey, fontSize: 13))),
+                        offset: Offset(spreadOffset, 0),
+                        child: Opacity(opacity: uiOpacity, child: const Text("Updated from library core just now", style: TextStyle(color: Color(0xFF80A1BA), fontSize: 13))),
                       ),
                       const SizedBox(height: 15),
                       
                       Transform.translate(
-                        offset: Offset(0, _scrollProgress * 600),
+                        offset: Offset(0, spreadOffset),
                         child: Opacity(opacity: uiOpacity, child: const VerificationBar()),
                       ),
                       const SizedBox(height: 20),
@@ -145,16 +155,24 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
                           children: [
                             Expanded(
                               child: Transform.translate(
-                                offset: Offset(-_scrollProgress * 600, 0),
+                                offset: Offset(-spreadOffset, 0),
                                 child: _buildActionButton(
                                   title: "Nhập NFC",
                                   icon: Icons.nfc_rounded,
-                                  color: Colors.blueAccent,
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => const HomeScreen()),
-                                    );
+                                  color: const Color(0xFF91C4C3),
+                                  onTap: () async {
+                                    await _lottieController.forward();
+                                    if (context.mounted) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (context) => const HomeScreen()),
+                                      ).then((_) {
+                                        _lottieController.reset();
+                                        setState(() {
+                                          _scrollProgress = 0.0;
+                                        });
+                                      });
+                                    }
                                   },
                                 ),
                               ),
@@ -162,11 +180,11 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
                             const SizedBox(width: 15),
                             Expanded(
                               child: Transform.translate(
-                                offset: Offset(_scrollProgress * 600, 0),
+                                offset: Offset(spreadOffset, 0),
                                 child: _buildActionButton(
                                   title: "Đăng ký",
                                   icon: Icons.app_registration_rounded,
-                                  color: Colors.greenAccent,
+                                  color: const Color(0xFFB4DEBD),
                                   onTap: () {
                                     Navigator.push(
                                       context,
@@ -184,22 +202,11 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
                   ),
                 ),
               ),
-            ),
             
-            // --- Hướng dẫn vuốt ---
-            Positioned(
-              bottom: 40, left: 0, right: 0,
-              child: Opacity(
-                opacity: uiOpacity,
-                child: const Column(
-                  children: [
-                    Icon(Icons.keyboard_double_arrow_down_rounded, size: 30, color: Colors.blueAccent),
-                    Text("Vuốt xuống để mở sách", style: TextStyle(color: Colors.blueAccent)),
-                  ],
-                ),
-              ),
-            )
-          ],
+            // --- Đã bỏ hướng dẫn vuốt xuống ---
+              ],
+            );
+          },
         ),
       ),
     );

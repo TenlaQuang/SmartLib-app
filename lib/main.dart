@@ -14,9 +14,9 @@ class SmartLibApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Real 3D SmartLib Book',
       theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        colorSchemeSeed: Colors.blue,
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFFFF7DD),
+        colorSchemeSeed: const Color(0xFF91C4C3),
       ),
       home: const ProfessionalIntroScreen(),
     );
