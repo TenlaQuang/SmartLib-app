@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
 import '../../services/api_service.dart';
-
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -23,112 +24,113 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _emailController = TextEditingController();
   
   String _gender = 'Nam';
+  
+  bool _isPaymentLinkCreated = false;
+  int? _payosOrderCode;
+  Uint8List? _invoiceImageBytes;
+  String? _invoiceFilename;
 
-  Future<void> _submitRegistration() async {
+  Future<void> _createPaymentLink() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
 
-    final userData = {
-      'user_code': _userCodeController.text.trim(),
-      'full_name': _fullNameController.text.trim(),
-      'gender': _gender,
-      'birth_year': int.tryParse(_birthYearController.text.trim()),
-      'phone_number': _phoneController.text.trim(),
-      'address': _addressController.text.trim(),
-      'email': _emailController.text.trim(),
-    };
-
     try {
-      final checkoutUrl = await _apiService.registerUser(userData);
+      final data = await _apiService.createPaymentLink(_userCodeController.text.trim());
+      final checkoutUrl = data['checkoutUrl'] as String?;
+      final orderCode = data['order_code'] as int?;
 
       if (!mounted) return;
 
       if (checkoutUrl != null && checkoutUrl.isNotEmpty) {
-        // Mở trang thanh toán PayOS trong trình duyệt
+        setState(() {
+          _isPaymentLinkCreated = true;
+          _payosOrderCode = orderCode;
+        });
+
         final uri = Uri.parse(checkoutUrl);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         }
-
-        // Hiện dialog thông báo sau khi mở thanh toán
-        if (mounted) {
-          await showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: const Row(
-                children: [
-                  Icon(Icons.payment_rounded, color: Color(0xFF91C4C3), size: 28),
-                  SizedBox(width: 10),
-                  Text(
-                    'Thanh toán',
-                    style: TextStyle(
-                      color: Color(0xFF80A1BA),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              content: const Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Trang thanh toán PayOS đã được mở trên trình duyệt.',
-                    style: TextStyle(color: Color(0xFF80A1BA), fontSize: 15),
-                  ),
-                  SizedBox(height: 12),
-                  Text(
-                    '✅ Vui lòng quét mã QR và hoàn tất chuyển khoản.',
-                    style: TextStyle(color: Color(0xFF91C4C3), fontSize: 14),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    '📩 Sau khi thanh toán, hãy chờ email xác nhận phê duyệt từ thư viện.',
-                    style: TextStyle(color: Color(0xFF91C4C3), fontSize: 14),
-                  ),
-                ],
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(); // Đóng dialog
-                    Navigator.of(context).pop(); // Quay về trang Intro
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFB4DEBD),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  ),
-                  child: const Text(
-                    'Đã hiểu, quay về',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
       } else {
-        // Không có checkout URL - đăng ký thành công nhưng không có link thanh toán
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đăng ký thành công! Đang chờ phê duyệt.'),
-            backgroundColor: Color(0xFF91C4C3),
-          ),
-        );
-        Navigator.pop(context);
+        throw Exception('Không nhận được URL thanh toán');
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi: ${e.toString().replaceAll('Exception: ', '')}'),
-            backgroundColor: Colors.redAccent,
+          SnackBar(content: Text('Lỗi: ${e.toString().replaceAll('Exception: ', '')}'), backgroundColor: Colors.redAccent),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _pickInvoiceImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
+      setState(() {
+        _invoiceImageBytes = bytes;
+        _invoiceFilename = pickedFile.name;
+      });
+    }
+  }
+
+  Future<void> _submitRegistration() async {
+    if (_invoiceImageBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng tải lên ảnh minh chứng thanh toán!'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // 1. Upload image first
+      final imageUrl = await _apiService.uploadInvoiceImage(_invoiceImageBytes!, _invoiceFilename ?? 'invoice.jpg');
+
+      // 2. Submit form
+      final userData = {
+        'user_code': _userCodeController.text.trim(),
+        'full_name': _fullNameController.text.trim(),
+        'gender': _gender,
+        'birth_year': int.tryParse(_birthYearController.text.trim()),
+        'phone_number': _phoneController.text.trim(),
+        'address': _addressController.text.trim(),
+        'email': _emailController.text.trim(),
+        'invoice_image_url': imageUrl,
+        'payos_order_code': _payosOrderCode,
+      };
+
+      final success = await _apiService.registerUser(userData);
+
+      if (!mounted) return;
+
+      if (success) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Đăng ký thành công', style: TextStyle(color: Color(0xFF91C4C3))),
+            content: const Text('Thông tin của bạn đã được gửi. Vui lòng chờ thư viện phê duyệt.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pop(context); // Về màn hình trước
+                },
+                child: const Text('Đóng'),
+              )
+            ],
           ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi: ${e.toString().replaceAll('Exception: ', '')}'), backgroundColor: Colors.redAccent),
         );
       }
     } finally {
@@ -251,28 +253,93 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 
                 const SizedBox(height: 40),
                 
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _submitRegistration,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFB4DEBD),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    elevation: 5,
-                    shadowColor: const Color(0xFFB4DEBD).withOpacity(0.5),
-                    shape: RoundedRectangleBorder(
+                if (_isPaymentLinkCreated) ...[
+                  Container(
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF91C4C3)),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'Bước 2: Tải lên minh chứng',
+                          style: TextStyle(color: Color(0xFF80A1BA), fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Sau khi thanh toán bên PayOS thành công, vui lòng tải ảnh chụp màn hình bill chuyển khoản lên đây.',
+                          style: TextStyle(color: Colors.grey, fontSize: 13),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 15),
+                        _invoiceImageBytes != null
+                            ? Column(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.memory(
+                                      _invoiceImageBytes!,
+                                      height: 150,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: _pickInvoiceImage,
+                                    icon: const Icon(Icons.edit, color: Color(0xFF91C4C3)),
+                                    label: const Text('Chọn ảnh khác', style: TextStyle(color: Color(0xFF91C4C3))),
+                                  )
+                                ],
+                              )
+                            : OutlinedButton.icon(
+                                onPressed: _pickInvoiceImage,
+                                icon: const Icon(Icons.upload_file, color: Color(0xFF91C4C3)),
+                                label: const Text('Chọn ảnh Bill', style: TextStyle(color: Color(0xFF91C4C3))),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFF91C4C3)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                                ),
+                              ),
+                      ],
                     ),
                   ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                        )
-                      : const Text(
-                          'GỬI ĐĂNG KÝ',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _submitRegistration,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF91C4C3),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text('HOÀN TẤT ĐĂNG KÝ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+                ] else ...[
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _createPaymentLink,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFB4DEBD),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      elevation: 5,
+                      shadowColor: const Color(0xFFB4DEBD).withOpacity(0.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text(
+                            'TIẾP TỤC THANH TOÁN',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                  ),
+                ]
               ],
             ),
           ),
