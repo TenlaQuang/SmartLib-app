@@ -355,9 +355,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               width: double.infinity,
               color: Colors.grey[200],
               child: Image.network(
-                book.isbn.isNotEmpty 
-                    ? 'https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg' 
-                    : '',
+                (book.imageUrl != null && book.imageUrl!.isNotEmpty)
+                    ? book.imageUrl!
+                    : (book.isbn.isNotEmpty 
+                        ? 'https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg' 
+                        : ''),
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) => const Icon(
                   Icons.menu_book_rounded,

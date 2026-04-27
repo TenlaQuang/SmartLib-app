@@ -22,4 +22,24 @@ class ApiService {
       throw Exception('Lỗi kết nối tới Server: $e');
     }
   }
+
+  Future<bool> registerUser(Map<String, dynamic> userData) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(userData),
+      );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        // Parse the error detail if available
+        final errorData = json.decode(utf8.decode(response.bodyBytes));
+        throw Exception(errorData['detail'] ?? 'Đăng ký thất bại');
+      }
+    } catch (e) {
+      throw Exception('Lỗi kết nối: $e');
+    }
+  }
 }

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:lottie/lottie.dart';
 import '../widgets/intro_components.dart'; // Import các widget đã tách
 import 'home_screen.dart';
+import 'register_screen.dart';
 
 class ProfessionalIntroScreen extends StatefulWidget {
   const ProfessionalIntroScreen({super.key});
@@ -167,8 +168,12 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
                                   icon: Icons.app_registration_rounded,
                                   color: Colors.greenAccent,
                                   onTap: () {
-                                    // TODO: Xử lý đăng ký
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                                    );
                                   },
+
                                 ),
                               ),
                             ),
