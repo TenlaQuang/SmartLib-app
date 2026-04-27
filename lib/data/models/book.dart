@@ -6,6 +6,7 @@ class Book {
   final String categoryName;
   final String locationZone;
   final double marketPrice;
+  final String? imageUrl;
 
   Book({
     required this.id,
@@ -15,6 +16,7 @@ class Book {
     required this.categoryName,
     required this.locationZone,
     required this.marketPrice,
+    this.imageUrl,
   });
 
   factory Book.fromJson(Map<String, dynamic> json) {
@@ -26,6 +28,7 @@ class Book {
       categoryName: json['category'] != null ? json['category']['name'] : 'Thể loại khác',
       locationZone: json['location'] != null ? json['location']['zone_name'] ?? '' : '',
       marketPrice: json['market_price'] != null ? double.tryParse(json['market_price'].toString()) ?? 0.0 : 0.0,
+      imageUrl: json['image_url']?.toString(),
     );
   }
 }
