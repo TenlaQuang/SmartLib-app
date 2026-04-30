@@ -49,7 +49,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
         final uri = Uri.parse(checkoutUrl);
         if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          await launchUrl(
+            uri, 
+            mode: LaunchMode.inAppBrowserView, // Sử dụng trình duyệt trong ứng dụng cho mượt mà hơn trên Mobile
+          );
+        } else {
+          throw Exception('Không thể mở liên kết thanh toán. Vui lòng kiểm tra trình duyệt của bạn.');
         }
       } else {
         throw Exception('Không nhận được URL thanh toán');
@@ -86,25 +91,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     setState(() => _isLoading = true);
-
     try {
-      // 1. Upload image first
-      final imageUrl = await _apiService.uploadInvoiceImage(_invoiceImageBytes!, _invoiceFilename ?? 'invoice.jpg');
-
-      // 2. Submit form
       final userData = {
         'user_code': _userCodeController.text.trim(),
         'full_name': _fullNameController.text.trim(),
         'gender': _gender,
-        'birth_year': int.tryParse(_birthYearController.text.trim()),
+        'birth_year': int.tryParse(_birthYearController.text.trim()) ?? 0,
         'phone_number': _phoneController.text.trim(),
         'address': _addressController.text.trim(),
         'email': _emailController.text.trim(),
-        'invoice_image_url': imageUrl,
-        'payos_order_code': _payosOrderCode,
+        'payos_order_code': _payosOrderCode ?? 0,
       };
 
-      final success = await _apiService.registerUser(userData);
+      final success = await _apiService.registerUser(
+        userData, 
+        _invoiceImageBytes, 
+        _invoiceFilename
+      );
 
       if (!mounted) return;
 
