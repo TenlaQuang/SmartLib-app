@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../data/models/book.dart';
+import 'shelf_detail_screen.dart';
 import '../../services/api_service.dart';
+import '../widgets/user_dashboard_popup.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final Map<String, dynamic>? userData;
+  const HomeScreen({super.key, this.userData});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -12,11 +15,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   final ApiService _apiService = ApiService();
   late Future<List<Book>> _booksFuture;
+  late Future<List<Map<String, dynamic>>> _locationsFuture;
   late TabController _tabController;
 
-  void _loadBooks() {
+  void _loadData() {
     setState(() {
       _booksFuture = _apiService.fetchBooks();
+      _locationsFuture = _apiService.fetchLocations();
     });
   }
 
@@ -24,7 +29,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _loadBooks();
+    _loadData();
   }
 
   @override
@@ -44,9 +49,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           "Library",
           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.menu, color: Colors.white),
-          onPressed: () {},
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: GestureDetector(
+            onTap: _showUserDashboard,
+            child: CircleAvatar(
+              backgroundColor: Colors.white24,
+              child: Text(
+                (widget.userData?['full_name'] ?? "U")[0].toUpperCase(),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
         ),
         actions: [
           IconButton(
@@ -135,52 +149,83 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // --- Tab 1: Shelves (Khám phá theo Kệ) ---
+  // --- Tab 1: Shelves (Khám phá theo Kệ dựa trên bảng locations) ---
   Widget _buildShelvesTab() {
-    return Column(
-      children: [
-        // Thanh Breadcrumb "Home >" và số lượng "15/3099"
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: const [
-                  Icon(Icons.home, size: 20, color: Colors.grey),
-                  SizedBox(width: 4),
-                  Text(">", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _locationsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF91C4C3)));
+        } else if (snapshot.hasError) {
+          return Center(child: Text("Lỗi: ${snapshot.error}"));
+        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text("Chưa có thông tin kệ sách."));
+        }
+
+        final locations = snapshot.data!;
+        
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.home, size: 20, color: Colors.grey),
+                      SizedBox(width: 4),
+                      Text(">", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                      SizedBox(width: 4),
+                      Text("Locations", style: TextStyle(color: Color(0xFF80A1BA), fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Text("${locations.length} Shelves", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.refresh_rounded, color: Colors.grey, size: 20),
+                    ],
+                  )
                 ],
               ),
-              Row(
-                children: const [
-                  Text("15/3099", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
-                  SizedBox(width: 8),
-                  Icon(Icons.filter_list, color: Colors.grey),
-                ],
-              )
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        // Lưới hiển thị các kệ sách tĩnh
-        Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 24,
-              childAspectRatio: 0.65, // Tỷ lệ để nhét vừa ảnh dọc
             ),
-            itemCount: 12, // Hiển thị mẫu 12 kệ
-            itemBuilder: (context, index) {
-              final shelfName = String.fromCharCode(65 + index); // A, B, C...
-              return _buildShelfItem("Shelf $shelfName", (index + 1) * 7 + 3);
-            },
-          ),
-        ),
-      ],
+            const Divider(height: 1),
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.all(16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 24,
+                  childAspectRatio: 0.65,
+                ),
+                itemCount: locations.length,
+                itemBuilder: (context, index) {
+                  final loc = locations[index];
+                  // Tên hiển thị: Ví dụ "Kệ A1" hoặc "Khu A"
+                  final shelfName = loc['shelf_id'] ?? loc['zone_name'] ?? "Kệ ${loc['location_id']}";
+                  final bookCount = loc['book_count'] ?? 0;
+                  
+                  return GestureDetector(
+                    onTap: () {
+                      if (loc['shelf_id'] != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ShelfDetailScreen(shelfId: loc['shelf_id']),
+                          ),
+                        );
+                      }
+                    },
+                    child: _buildShelfItem(shelfName, bookCount),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -311,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton.icon(
-                    onPressed: _loadBooks,
+                    onPressed: _loadData,
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Thử kết nối lại'),
                     style: ElevatedButton.styleFrom(
@@ -439,6 +484,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           )
         ],
+      ),
+    );
+  }
+
+  void _showUserDashboard() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => UserDashboardPopup(
+        userData: widget.userData ?? {},
+        onLogout: () {
+          Navigator.pop(context); // Đóng popup
+          Navigator.pop(context); // Quay về Intro (do HomeScreen được push từ Intro)
+        },
       ),
     );
   }

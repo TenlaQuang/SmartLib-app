@@ -67,14 +67,31 @@ class ApiService {
     }
   }
 
-  Future<bool> registerUser(Map<String, dynamic> userData) async {
+  Future<bool> registerUser(Map<String, dynamic> userData, Uint8List? imageBytes, String? imageFilename) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/register'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(userData),
-      ).timeout(const Duration(seconds: 60));
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/register'));
+      
+      // Thêm các trường form
+      userData.forEach((key, value) {
+        if (value != null) {
+          request.fields[key] = value.toString();
+        }
+      });
 
+      // Thêm file ảnh nếu có
+      if (imageBytes != null && imageFilename != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'invoice_image',
+            imageBytes,
+            filename: imageFilename,
+          )
+        );
+      }
+
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamedResponse);
+      
       final responseData = json.decode(utf8.decode(response.bodyBytes));
 
       if (response.statusCode == 200) {
@@ -82,11 +99,7 @@ class ApiService {
       } else {
         throw Exception(responseData['detail'] ?? 'Đăng ký thất bại');
       }
-    } on Exception catch (e) {
-      final msg = e.toString();
-      if (msg.contains('TimeoutException')) {
-        throw Exception('Server đang khởi động, vui lòng thử lại sau 30 giây...');
-      }
+    } catch (e) {
       throw Exception('Lỗi kết nối: $e');
     }
   }
@@ -121,6 +134,76 @@ class ApiService {
         return true;
       } else {
         throw Exception(responseData['detail'] ?? 'Gán thẻ NFC thất bại');
+      }
+    } catch (e) {
+      throw Exception('Lỗi kết nối: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> loginNfc(String nfcSerial) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/login-nfc'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'nfc_serial': nfcSerial}),
+      ).timeout(const Duration(seconds: 10));
+
+      final responseData = json.decode(utf8.decode(response.bodyBytes));
+      if (response.statusCode == 200) {
+        return responseData;
+      } else {
+        throw Exception(responseData['detail'] ?? 'Đăng nhập thất bại');
+      }
+    } catch (e) {
+      throw Exception('Lỗi đăng nhập: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchUserActivity(int userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/users/$userId/activity'),
+      ).timeout(const Duration(seconds: 10));
+
+      final responseData = json.decode(utf8.decode(response.bodyBytes));
+      if (response.statusCode == 200) {
+        return responseData;
+      } else {
+        throw Exception(responseData['detail'] ?? 'Không thể lấy dữ liệu hoạt động');
+      }
+    } catch (e) {
+      throw Exception('Lỗi kết nối: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchLocations() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/locations'),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+        return data.cast<Map<String, dynamic>>();
+      } else {
+        throw Exception('Không thể lấy danh sách kệ sách');
+      }
+    } catch (e) {
+      throw Exception('Lỗi kết nối: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchShelfDetails(String shelfId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/shelves/$shelfId'),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+        return data.cast<Map<String, dynamic>>();
+      } else {
+        throw Exception('Không thể lấy chi tiết kệ sách');
       }
     } catch (e) {
       throw Exception('Lỗi kết nối: $e');
