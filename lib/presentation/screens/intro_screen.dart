@@ -4,6 +4,7 @@ import 'package:lottie/lottie.dart';
 import '../widgets/intro_components.dart'; // Import các widget đã tách
 import 'home_screen.dart';
 import 'register_screen.dart';
+import 'nfc_registration_screen.dart';
 
 class ProfessionalIntroScreen extends StatefulWidget {
   const ProfessionalIntroScreen({super.key});
@@ -182,16 +183,15 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
                               child: Transform.translate(
                                 offset: Offset(spreadOffset, 0),
                                 child: _buildActionButton(
-                                  title: "Đăng ký",
-                                  icon: Icons.app_registration_rounded,
+                                  title: "Đăng ký thẻ",
+                                  icon: Icons.contactless_rounded,
                                   color: const Color(0xFFB4DEBD),
                                   onTap: () {
                                     Navigator.push(
                                       context,
-                                      MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                                      MaterialPageRoute(builder: (context) => const NfcRegistrationScreen()),
                                     );
                                   },
-
                                 ),
                               ),
                             ),
