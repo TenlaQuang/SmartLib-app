@@ -90,5 +90,41 @@ class ApiService {
       throw Exception('Lỗi kết nối: $e');
     }
   }
+
+  Future<Map<String, dynamic>> checkUserStatus(String userCode) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/users/check/$userCode'))
+          .timeout(const Duration(seconds: 30));
+      
+      final responseData = json.decode(utf8.decode(response.bodyBytes));
+      if (response.statusCode == 200) {
+        return responseData;
+      } else {
+        throw Exception(responseData['detail'] ?? 'Kiểm tra mã sinh viên thất bại');
+      }
+    } catch (e) {
+      throw Exception('Lỗi kết nối: $e');
+    }
+  }
+
+  Future<bool> assignNfc(int userId, String nfcSerial) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/users/$userId/assign-nfc'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'nfc_serial': nfcSerial}),
+      ).timeout(const Duration(seconds: 30));
+
+      final responseData = json.decode(utf8.decode(response.bodyBytes));
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        throw Exception(responseData['detail'] ?? 'Gán thẻ NFC thất bại');
+      }
+    } catch (e) {
+      throw Exception('Lỗi kết nối: $e');
+    }
+  }
 }
 
