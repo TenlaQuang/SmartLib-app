@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:nfc_manager/nfc_manager.dart';
 import '../../services/api_service.dart';
 import 'register_screen.dart';
 import 'home_screen.dart';
@@ -48,52 +50,235 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
     }
   }
 
-  Future<void> _simulateNfcScan() async {
+  Future<void> _startNfcScan() async {
     if (_userData == null) return;
 
-    setState(() => _isLoading = true);
+    // Check availability
+    bool isAvailable = await NfcManager.instance.isAvailable();
+    if (!isAvailable) {
+      setState(() => _errorMessage = "Thiết bị của bạn không hỗ trợ NFC hoặc chưa được bật.");
+      return;
+    }
+
+    _showScanningBottomSheet();
+
     try {
-      final nfcSerial = "NFC-${DateTime.now().millisecondsSinceEpoch}";
-      final success = await _apiService.assignNfc(_userData!['user_id'], nfcSerial);
-      if (success) {
-        if (mounted) {
-          _showSuccessDialog();
-        }
-      }
+      // Start Session
+      NfcManager.instance.startSession(
+        onDiscovered: (NfcTag tag) async {
+          try {
+            await HapticFeedback.heavyImpact();
+            
+            // Extract identifier
+            final List<int> identifier = tag.data['isodep']?['identifier'] ?? 
+                                         tag.data['nfca']?['identifier'] ?? 
+                                         tag.data['mifareultralight']?['identifier'] ??
+                                         tag.data['nfcv']?['identifier'] ??
+                                         [];
+            
+            if (identifier.isEmpty) {
+               if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+               setState(() => _errorMessage = "Không thể đọc được ID của thẻ này.");
+               await NfcManager.instance.stopSession();
+               setState(() => _isLoading = false);
+               return;
+            }
+
+            final String nfcSerial = identifier.map((e) => e.toRadixString(16).padLeft(2, '0')).join(':').toUpperCase();
+            
+            // Stop session immediately after reading
+            await NfcManager.instance.stopSession();
+
+            // Close bottom sheet
+            if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+
+            final success = await _apiService.assignNfc(_userData!['user_id'], nfcSerial);
+            if (success) {
+              if (mounted) {
+                _showSuccessDialog();
+              }
+            }
+          } catch (e) {
+            if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+            setState(() => _errorMessage = "Lỗi khi xử lý thẻ: $e");
+          } finally {
+            if (mounted) setState(() => _isLoading = false);
+          }
+        },
+        onError: (error) async {
+          if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+          setState(() {
+            _errorMessage = "Lỗi quét NFC: $error";
+            _isLoading = false;
+          });
+        },
+      );
     } catch (e) {
-      setState(() => _errorMessage = e.toString().replaceFirst("Exception: ", ""));
-    } finally {
-      setState(() => _isLoading = false);
+      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+      setState(() {
+        _errorMessage = "Không thể khởi động trình quét NFC: $e";
+        _isLoading = false;
+      });
     }
   }
 
   void _showSuccessDialog() {
-    showDialog(
+    showGeneralDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green),
-            SizedBox(width: 10),
-            Text("Thành công"),
-          ],
-        ),
-        content: const Text("Thẻ NFC của bạn đã được kích hoạt thành công. Bạn có thể sử dụng các dịch vụ của thư viện ngay bây giờ."),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop(); // Close dialog
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (context) => const HomeScreen()),
-              );
-            },
-            child: const Text("Vào trang chủ", style: TextStyle(color: Color(0xFF91C4C3), fontWeight: FontWeight.bold)),
+      barrierLabel: '',
+      transitionDuration: const Duration(milliseconds: 400),
+      pageBuilder: (context, anim1, anim2) => const SizedBox(),
+      transitionBuilder: (context, anim1, anim2, child) {
+        return Transform.scale(
+          scale: anim1.value,
+          child: Opacity(
+            opacity: anim1.value,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+              contentPadding: EdgeInsets.zero,
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    height: 150,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF91C4C3), Color(0xFF80A1BA)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(28),
+                        topRight: Radius.circular(28),
+                      ),
+                    ),
+                    child: const Center(
+                      child: Icon(Icons.check_circle_rounded, color: Colors.white, size: 80),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      children: [
+                        const Text(
+                          "KÍCH HOẠT THÀNH CÔNG!",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF80A1BA),
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          "Thẻ SmartLib của bạn đã sẵn sàng để sử dụng. Chào mừng bạn đến với thư viện thông minh!",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey, fontSize: 15, height: 1.5),
+                        ),
+                        const SizedBox(height: 32),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              Navigator.of(context).pushReplacement(
+                                MaterialPageRoute(builder: (context) => const HomeScreen()),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF91C4C3),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                              elevation: 0,
+                            ),
+                            child: const Text("VÀO TRANG CHỦ", style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  void _showScanningBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isDismissible: true,
+      enableDrag: false,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              padding: const EdgeInsets.all(32),
+              height: 400,
+              child: Column(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  const Text(
+                    "Sẵn sàng quét thẻ",
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF80A1BA)),
+                  ),
+                  const SizedBox(height: 15),
+                  const Text(
+                    "Hãy áp thẻ của bạn vào mặt lưng điện thoại",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontSize: 16),
+                  ),
+                  const Spacer(),
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF91C4C3).withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const Icon(Icons.contactless_rounded, color: Color(0xFF91C4C3), size: 60),
+                    ],
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      NfcManager.instance.stopSession();
+                      Navigator.pop(context);
+                    },
+                    child: const Text("Hủy bỏ", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ).then((_) {
+      // Ensure session is stopped if user dismisses bottom sheet
+      NfcManager.instance.stopSession();
+    });
   }
 
   @override
@@ -261,7 +446,7 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
           width: double.infinity,
           height: 60,
           child: ElevatedButton.icon(
-            onPressed: _isLoading ? null : _simulateNfcScan,
+            onPressed: _isLoading ? null : _startNfcScan,
             icon: const Icon(Icons.nfc_rounded, size: 28),
             label: const Text("QUÉT THẺ NFC", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
             style: ElevatedButton.styleFrom(
