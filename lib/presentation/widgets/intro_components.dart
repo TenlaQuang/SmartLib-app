@@ -39,14 +39,29 @@ class VerificationBar extends StatelessWidget {
       child: const Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Icon(Icons.verified_user_outlined, color: Color(0xFF91C4C3), size: 20),
-              SizedBox(width: 10),
-              Text("NFC System State", style: TextStyle(color: Color(0xFF80A1BA), fontWeight: FontWeight.bold)),
-            ],
+          Expanded(
+            child: Row(
+              children: [
+                Icon(Icons.verified_user_outlined, color: Color(0xFF91C4C3), size: 20),
+                SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    "NFC System State", 
+                    style: TextStyle(color: Color(0xFF80A1BA), fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
-          Text("100% / Active", style: TextStyle(color: Color(0xFF80A1BA), fontWeight: FontWeight.bold, fontSize: 16)),
+          SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              "100% / Active", 
+              style: TextStyle(color: Color(0xFF80A1BA), fontWeight: FontWeight.bold, fontSize: 14),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );

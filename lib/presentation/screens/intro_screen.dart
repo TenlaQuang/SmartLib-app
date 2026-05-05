@@ -207,19 +207,15 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
   }
 
   Future<void> _startNfcLogin() async {
-    bool isAvailable = await NfcManager.instance.isAvailable();
-    if (!isAvailable) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Thiết bị không hỗ trợ NFC hoặc chưa bật")),
-        );
-      }
-      return;
-    }
-
-    _showScanningBottomSheet();
-
     try {
+      bool isAvailable = await NfcManager.instance.isAvailable();
+      if (!isAvailable) {
+        _showManualNfcDialog();
+        return;
+      }
+
+      _showScanningBottomSheet();
+
       NfcManager.instance.startSession(
         onDiscovered: (NfcTag tag) async {
           try {
@@ -253,13 +249,60 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
         },
       );
     } catch (e) {
-      _closeAndShowError("Không thể khởi động NFC: $e");
+      // Fallback for Web/Desktop where nfc_manager is not supported
+      _showManualNfcDialog();
     }
   }
 
+  void _showManualNfcDialog() {
+    final TextEditingController controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Nhập NFC Serial"),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: "Ví dụ: 04:A1:B2:C3:D4:E5:F6",
+            labelText: "NFC Serial Code",
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text("Hủy"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final String code = controller.text.trim();
+              if (code.isEmpty) return;
+              
+              Navigator.pop(dialogContext); // Close dialog
+              
+              try {
+                final result = await _apiService.loginNfc(code);
+                if (!mounted) return;
+                _showLoginSuccess(result['message'], result['user']);
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Lỗi: $e"), backgroundColor: Colors.redAccent),
+                );
+              }
+            },
+            child: const Text("Xác nhận"),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _closeAndShowError(String message) {
-    if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-    NfcManager.instance.stopSession();
+    if (!mounted) return;
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    try {
+      NfcManager.instance.stopSession();
+    } catch (_) {}
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.redAccent));
   }
 

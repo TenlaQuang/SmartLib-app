@@ -41,6 +41,9 @@ dependencies:
   http_parser: ^4.1.2
   nfc_manager: ^3.3.0
   intl: ^0.20.2
+  mobile_scanner: ^7.2.0
+  palette_generator: ^0.3.3+7
+  google_fonts: ^8.1.0
   
 dev_dependencies:
   flutter_test:
