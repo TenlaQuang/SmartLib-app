@@ -7,20 +7,79 @@ class ApiService {
   // Thay đổi URL tùy thuộc vào môi trường chạy.
   static const String baseUrl = 'https://smartlib-be.onrender.com';
 
-  Future<List<Book>> fetchBooks() async {
+  Future<List<Book>> fetchBooks({String? search}) async {
     try {
+      String url = '$baseUrl/api/books?page_size=100';
+      if (search != null && search.isNotEmpty) {
+        url += '&q=$search';
+      }
       final response = await http
-          .get(Uri.parse('$baseUrl/api/books'))
+          .get(Uri.parse(url))
           .timeout(const Duration(seconds: 30));
       
       if (response.statusCode == 200) {
-        List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+        final Map<String, dynamic> result = json.decode(utf8.decode(response.bodyBytes));
+        final List<dynamic> data = result['data'] ?? [];
         return data.map((json) => Book.fromJson(json)).toList();
       } else {
         throw Exception('Failed to load books from API');
       }
     } catch (e) {
       throw Exception('Lỗi kết nối tới Server: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchCategoriesWithBooks() async {
+    try {
+      final catResponse = await http.get(Uri.parse('$baseUrl/api/categories')).timeout(const Duration(seconds: 15));
+      if (catResponse.statusCode != 200) return [];
+      
+      List<dynamic> catData = json.decode(utf8.decode(catResponse.bodyBytes));
+      // Lấy 5 category đầu tiên
+      final topCategories = catData.take(5).toList();
+      
+      List<Map<String, dynamic>> result = [];
+      
+      for (var cat in topCategories) {
+        final catId = cat['category_id'];
+        final catName = cat['name'] ?? 'Thể loại khác';
+        
+        // Fetch 5 books for this category
+        final booksResponse = await http.get(Uri.parse('$baseUrl/api/books?category_id=$catId&page_size=5')).timeout(const Duration(seconds: 10));
+        if (booksResponse.statusCode == 200) {
+          final Map<String, dynamic> booksResult = json.decode(utf8.decode(booksResponse.bodyBytes));
+          final List<dynamic> booksData = booksResult['data'] ?? [];
+          final books = booksData.map((json) => Book.fromJson(json)).toList();
+          
+          if (books.isNotEmpty) {
+            result.add({
+              'category_id': catId,
+              'category_name': catName.toString(),
+              'books': books
+            });
+          }
+        }
+      }
+      return result;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<Book>> fetchFeaturedWeeklyBooks() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/books/featured-weekly'))
+          .timeout(const Duration(seconds: 15));
+      
+      if (response.statusCode == 200) {
+        List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+        return data.map((json) => Book.fromJson(json)).toList();
+      } else {
+        return [];
+      }
+    } catch (e) {
+      return [];
     }
   }
 
