@@ -6,6 +6,7 @@ import 'package:palette_generator/palette_generator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../data/models/book.dart';
 import 'shelf_detail_screen.dart';
+import 'book_detail_screen.dart';
 import '../../services/api_service.dart';
 import '../widgets/profile_page.dart';
 import '../widgets/scanner_page.dart';
@@ -295,84 +296,104 @@ class _HomeScreenState extends State<HomeScreen> {
 
 
 
-  // Card hiển thị sách như cũ nhưng đổi sang tông sáng phù hợp với theme mới
   Widget _buildBookCard(Book book) {
-    return Container(
-      width: 150,
-      margin: const EdgeInsets.only(right: 15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => BookDetailScreen(book: book),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(
+                opacity: animation,
+                child: child,
+              );
+            },
+            transitionDuration: const Duration(milliseconds: 500),
           ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Ảnh bìa
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              color: Colors.grey[200],
-              child: _buildBookImage(book),
+        );
+      },
+      borderRadius: BorderRadius.circular(15),
+      child: Container(
+        width: 150,
+        margin: const EdgeInsets.only(right: 15),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
             ),
-          ),
-          // Thông tin sách
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  book.title,
-                  style: const TextStyle(
-                    color: Colors.black87,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Ảnh bìa
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                color: Colors.grey[200],
+                child: Hero(
+                  tag: 'book_cover_${book.id}',
+                  child: _buildBookImage(book),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  book.categoryName,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: (book.status.toLowerCase() == "có sẵn" || book.status.toLowerCase() == "available")
-                        ? Colors.green.withOpacity(0.15) 
-                        : Colors.orange.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    (book.status.toLowerCase() == "có sẵn" || book.status.toLowerCase() == "available") ? "Có sẵn" : book.status,
-                    style: TextStyle(
-                      color: (book.status.toLowerCase() == "có sẵn" || book.status.toLowerCase() == "available")
-                          ? Colors.green[700] 
-                          : Colors.orange[800],
-                      fontSize: 10,
+              ),
+            ),
+            // Thông tin sách
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    book.title,
+                    style: const TextStyle(
+                      color: Colors.black87,
                       fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                )
-              ],
-            ),
-          )
-        ],
+                  const SizedBox(height: 4),
+                  Text(
+                    book.categoryName,
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: (book.status.toLowerCase() == "có sẵn" || book.status.toLowerCase() == "available")
+                          ? Colors.green.withOpacity(0.15) 
+                          : Colors.orange.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      (book.status.toLowerCase() == "có sẵn" || book.status.toLowerCase() == "available") ? "Có sẵn" : book.status,
+                      style: TextStyle(
+                        color: (book.status.toLowerCase() == "có sẵn" || book.status.toLowerCase() == "available")
+                            ? Colors.green[700] 
+                            : Colors.orange[800],
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                ],
+              ),
+            )
+          ],
+        ),
       ),
     );
   }
@@ -610,7 +631,20 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> with SingleTickerPr
               // Nội dung chính
               Padding(
                 padding: const EdgeInsets.only(top: 25, left: 15, right: 15, bottom: 15),
-                child: Row(
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      PageRouteBuilder(
+                        pageBuilder: (context, animation, secondaryAnimation) => BookDetailScreen(book: currentBook),
+                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                          return FadeTransition(opacity: animation, child: child);
+                        },
+                        transitionDuration: const Duration(milliseconds: 500),
+                      ),
+                    );
+                  },
+                  child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Bên trái: Ảnh sách (Lật trang 3D)
@@ -826,9 +860,10 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> with SingleTickerPr
             ],
           ),
         ),
-      ],
-    ),
+      ),
+    ],
   ),
+),
   
   // Badge: HOT TUẦN NÀY nổi nửa bên ngoài ở góc trái
         Positioned(
