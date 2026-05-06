@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
+import '../../data/models/book.dart';
+import 'book_detail_screen.dart';
 
 class ShelfDetailScreen extends StatefulWidget {
   final String shelfId;
@@ -147,52 +149,72 @@ class _ShelfDetailScreenState extends State<ShelfDetailScreen> {
     );
   }
 
-  Widget _buildBookItem(dynamic book) {
-    return Container(
-      margin: const EdgeInsets.only(right: 12),
-      width: 75,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(3),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.3), offset: const Offset(3, 0), blurRadius: 3)
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          Image.network(
-            (book['image_url'] != null && book['image_url'] != "") 
-                ? book['image_url'] 
-                : 'https://covers.openlibrary.org/b/isbn/${book['isbn']}-M.jpg',
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
-            errorBuilder: (context, error, stackTrace) => Container(
-              color: Colors.blueGrey[100],
-              padding: const EdgeInsets.all(4),
-              child: Center(
-                child: Text(
-                  book['title'], 
-                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold), 
-                  textAlign: TextAlign.center,
-                  maxLines: 4,
+  Widget _buildBookItem(dynamic bookData) {
+    // Chuyển đổi dữ liệu từ Map sang model Book
+    final book = Book.fromJson(bookData);
+
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => BookDetailScreen(book: book),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 500),
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(right: 12),
+        width: 75,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(3),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.3), offset: const Offset(3, 0), blurRadius: 3)
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          children: [
+            Hero(
+              tag: 'book_cover_${book.id}',
+              child: Image.network(
+                (bookData['image_url'] != null && bookData['image_url'] != "") 
+                    ? bookData['image_url'] 
+                    : 'https://covers.openlibrary.org/b/isbn/${bookData['isbn']}-M.jpg',
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: Colors.blueGrey[100],
+                  padding: const EdgeInsets.all(4),
+                  child: Center(
+                    child: Text(
+                      bookData['title'] ?? 'N/A', 
+                      style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold), 
+                      textAlign: TextAlign.center,
+                      maxLines: 4,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-          // Hiệu ứng bóng gáy sách
-          Container(
-            width: 4,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.black.withOpacity(0.2), Colors.transparent],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
+            // Hiệu ứng bóng gáy sách
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.black.withOpacity(0.2), Colors.transparent],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
