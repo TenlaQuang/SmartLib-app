@@ -16,16 +16,61 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
+class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStateMixin {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   Map<String, dynamic>? _activity;
   String? _error;
 
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideUpAnimation;
+  late Animation<Offset> _slideDownAnimation;
+  late Animation<double> _scaleAnimation;
+  late Animation<Offset> _bookSlideUpAnimation;
+  late Animation<double> _bookFadeAnimation;
+
   @override
   void initState() {
     super.initState();
     _loadActivity();
+    
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: const Interval(0.0, 0.5, curve: Curves.easeOut)),
+    );
+
+    _slideUpAnimation = Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(
+      CurvedAnimation(parent: _animationController, curve: const Interval(0.0, 0.5, curve: Curves.easeOutCubic)),
+    );
+
+    _slideDownAnimation = Tween<Offset>(begin: const Offset(0, -0.1), end: Offset.zero).animate(
+      CurvedAnimation(parent: _animationController, curve: const Interval(0.0, 0.5, curve: Curves.easeOutCubic)),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: const Interval(0.3, 0.6, curve: Curves.elasticOut)),
+    );
+
+    _bookSlideUpAnimation = Tween<Offset>(begin: const Offset(0, 1.0), end: Offset.zero).animate(
+      CurvedAnimation(parent: _animationController, curve: const Interval(0.6, 1.0, curve: Curves.easeOutCubic)),
+    );
+
+    _bookFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: const Interval(0.59, 0.60, curve: Curves.linear)),
+    );
+
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadActivity() async {
@@ -140,173 +185,417 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  String _getAvatarLetter(String fullName) {
+    if (fullName.isEmpty) return 'U';
+    final parts = fullName.trim().split(' ');
+    return parts.last[0].toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     final String fullName = widget.userData['full_name'] ?? 'Sinh viên SmartLib';
     final String userCode = widget.userData['user_code'] ?? 'N/A';
+    final String avatarLetter = _getAvatarLetter(fullName);
     
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF7DD),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: Column(
-            children: [
-              // Header: Profile
-              Container(
-                padding: const EdgeInsets.all(20),
+      backgroundColor: const Color(0xFF3E2723), // Dark brown background
+      body: Stack(
+        children: [
+          // 1. Background Layer (Dark top)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: MediaQuery.of(context).size.height * 0.4,
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: SlideTransition(
+                position: _slideDownAnimation,
+                child: Container(
+                  color: const Color(0xFF3E2723),
+                ),
+              ),
+            ),
+          ),
+          
+          // 1.5. Book Stacks Layer (Animated last, from bottom)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: MediaQuery.of(context).size.height * 0.4,
+            child: Stack(
+              children: [
+                // Left Book Stack
+                Positioned(
+                  left: -60,
+                  top: 12,
+                  width: 350,
+                  height: 300,
+                  child: FadeTransition(
+                    opacity: _bookFadeAnimation,
+                    child: SlideTransition(
+                      position: _bookSlideUpAnimation,
+                      child: Image.asset(
+                        'assets/images/book_stack_left.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
+                // Right Book Stack
+                Positioned(
+                  right: 10,
+                  top: 36,
+                  width: 230,
+                  height: 230,
+                  child: FadeTransition(
+                    opacity: _bookFadeAnimation,
+                    child: SlideTransition(
+                      position: _bookSlideUpAnimation,
+                      child: Image.asset(
+                        'assets/images/book_stack_right.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 2. Content Layer (Scrollable)
+          Positioned.fill(
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: SlideTransition(
+                position: _slideUpAnimation,
+                child: CustomScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  slivers: [
+                // Transparent space for the top header area
+                SliverToBoxAdapter(
+                  child: SizedBox(height: MediaQuery.of(context).size.height * 0.18),
+                ),
+                
+                // Main Content Container
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Container(
+                    width: double.infinity,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFF7DD),
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(95)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 20,
+                          offset: Offset(0, -5),
+                        )
+                      ],
+                    ),
+                    padding: const EdgeInsets.only(top: 60, left: 24, right: 24, bottom: 40),
+                    child: Column(
+                      children: [
+                        // Name and ID
+                        Text(
+                          fullName,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF3E2723),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "@$userCode",
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 10),
+
+                        // Bookshelves Section
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            "Tủ sách của bạn",
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF3E2723),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildShelfCard(
+                                title: "Đã đọc",
+                                count: _activity?['completed_count'] ?? 0,
+                                color: const Color(0xFFE5B97B),
+                                onTap: () => _showBottomSheet("Lịch sử mượn trả", _buildActivityList(false)),
+                              ),
+                            ),
+                            const SizedBox(width: 15),
+                            Expanded(
+                              child: _buildShelfCard(
+                                title: "Đang mượn",
+                                count: _activity?['ongoing_count'] ?? 0,
+                                color: const Color(0xFF91C4C3),
+                                onTap: () => _showBottomSheet("Sách đang mượn", _buildActivityList(true)),
+                              ),
+                            ),
+                            const SizedBox(width: 15),
+                            Expanded(
+                              child: _buildShelfCard(
+                                title: "Yêu thích",
+                                count: 0,
+                                color: const Color(0xFFE2B4B4),
+                                onTap: () {},
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 40),
+
+                        // Personal Info Action
+                        _buildActionRow(
+                          icon: Icons.badge_rounded,
+                          title: "Thông tin chi tiết",
+                          onTap: () => _showBottomSheet("Thông tin cá nhân", _buildPersonalInfo()),
+                        ),
+                        const Divider(),
+                        _buildActionRow(
+                          icon: Icons.settings_rounded,
+                          title: "Cài đặt tài khoản",
+                          onTap: () {},
+                        ),
+
+                        const Spacer(),
+
+                        // Logout Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: TextButton(
+                            onPressed: widget.onLogout,
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                            child: const Text(
+                              "Đăng xuất",
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            ),
+            ),
+          ),
+
+          // 3. Avatar Layer (Floating)
+          Positioned(
+            top: MediaQuery.of(context).size.height * 0.18 - 50,
+            left: MediaQuery.of(context).size.width / 2 - 50,
+            child: ScaleTransition(
+              scale: _scaleAnimation,
+              child: Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFFFF7DD), width: 4),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 10,
+                    offset: Offset(0, 5),
+                  )
+                ],
+                color: const Color(0xFF91C4C3),
+              ),
+              child: Center(
+                child: Text(
+                  avatarLetter,
+                  style: const TextStyle(
+                    fontSize: 40,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF3E2723),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildShelfCard({
+    required String title,
+    required int count,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 150,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(16),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(16),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 5,
+              offset: const Offset(2, 4),
+            )
+          ],
+        ),
+        child: Stack(
+          children: [
+            // Spine shading (Left)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 15,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.15),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(8),
+                    bottomLeft: Radius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+            // Spine line
+            Positioned(
+              left: 15,
+              top: 0,
+              bottom: 0,
+              width: 1,
+              child: Container(
+                color: Colors.white.withOpacity(0.3),
+              ),
+            ),
+            // Pages at the bottom
+            Positioned(
+              left: 10,
+              right: 2,
+              bottom: 0,
+              height: 12,
+              child: Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    )
-                  ],
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(4),
+                    bottomRight: Radius.circular(12),
+                  ),
+                  border: Border.all(color: color.withOpacity(0.5), width: 1),
                 ),
-                child: Row(
+              ),
+            ),
+            // Content
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16, right: 8, bottom: 12),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
-                      width: 70,
-                      height: 70,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF91C4C3), Color(0xFF80A1BA)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFF3E2723),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
                       ),
-                      child: const Icon(Icons.person, color: Colors.white, size: 40),
                     ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            fullName,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF2D3142),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "MSSV: $userCode",
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 4),
+                    Text(
+                      "($count)",
+                      style: const TextStyle(
+                        color: Color(0xFF3E2723),
+                        fontSize: 14,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
-              
-              // Menu Buttons
-              _buildMenuButton(
-                icon: Icons.badge_rounded,
-                title: "Thông tin cá nhân",
-                color: const Color(0xFF80A1BA),
-                onTap: () => _showBottomSheet("Thông tin cá nhân", _buildPersonalInfo()),
-              ),
-              _buildMenuButton(
-                icon: Icons.book_rounded,
-                title: "Sách đang mượn",
-                subtitle: _isLoading ? "Đang tải..." : "${_activity?['ongoing_count'] ?? 0} cuốn",
-                color: const Color(0xFF91C4C3),
-                onTap: () => _showBottomSheet("Sách đang mượn", _buildActivityList(true)),
-              ),
-              _buildMenuButton(
-                icon: Icons.history_rounded,
-                title: "Lịch sử đã mượn",
-                subtitle: _isLoading ? "Đang tải..." : "${_activity?['completed_count'] ?? 0} giao dịch",
-                color: Colors.orangeAccent,
-                onTap: () => _showBottomSheet("Lịch sử mượn trả", _buildActivityList(false)),
-              ),
-              _buildMenuButton(
-                icon: Icons.favorite_rounded,
-                title: "Sách yêu thích",
-                color: Colors.pinkAccent,
-                onTap: () => _showBottomSheet(
-                  "Sách yêu thích", 
-                  const Center(child: Text("Tính năng đang phát triển", style: TextStyle(color: Colors.grey)))
-                ),
-              ),
-              
-              const SizedBox(height: 40),
-              
-              // Logout Button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: widget.onLogout,
-                  icon: const Icon(Icons.logout_rounded, color: Colors.white),
-                  label: const Text(
-                    "ĐĂNG XUẤT",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF7D7D),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildMenuButton({
-    required IconData icon,
-    required String title,
-    String? subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          )
-        ],
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: Icon(icon, color: color, size: 28),
+  Widget _buildActionRow({required IconData icon, required String title, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12.0),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFF3E2723), size: 24),
+            const SizedBox(width: 15),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF2D3142),
+              ),
+            ),
+            const Spacer(),
+            const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+          ],
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        subtitle: subtitle != null ? Text(subtitle, style: const TextStyle(color: Colors.grey)) : null,
-        trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 18),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        onTap: onTap,
       ),
     );
   }
