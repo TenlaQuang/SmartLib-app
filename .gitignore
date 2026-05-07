@@ -60,4 +60,6 @@ app.*.map.json
 .env*
 sql-smartlib.txt
 *.sql
-
+
+data
+*.data
