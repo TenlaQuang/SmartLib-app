@@ -1,11 +1,41 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import '../data/models/book.dart';
 
 class ApiService {
   // Thay đổi URL tùy thuộc vào môi trường chạy.
   static const String baseUrl = 'https://smartlib-be.onrender.com';
+
+  // Biến static để đảm bảo chỉ có 1 timer chạy
+  static Timer? _keepAliveTimer;
+
+  /// Bắt đầu gửi tín hiệu "đánh thức" server định kỳ (mỗi 10 phút)
+  /// vì Render gói free sẽ tự ngủ sau 15 phút không hoạt động.
+  void startKeepAliveTimer() {
+    if (_keepAliveTimer != null) return;
+    
+    print("--- Khởi động Keep-Alive Timer cho Render ---");
+    // Chạy lần đầu ngay lập tức
+    _pingServer();
+
+    // Thiết lập chạy định kỳ mỗi 10 phút
+    _keepAliveTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
+      _pingServer();
+    });
+  }
+
+  Future<void> _pingServer() async {
+    try {
+      final response = await http.get(Uri.parse(baseUrl)).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        print("--- Render Keep-Alive: Success ---");
+      }
+    } catch (e) {
+      print("--- Render Keep-Alive Error: $e ---");
+    }
+  }
 
   Future<List<Book>> fetchBooks({String? search}) async {
     try {
@@ -26,6 +56,180 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Lỗi kết nối tới Server: $e');
+    }
+  }
+
+  Future<List<Book>> fetchUserRecommendations(int userId) async {
+    try {
+      final url = '$baseUrl/api/recommendations/user-centric/$userId';
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+        return data.map((json) => Book.fromJson(json)).toList();
+      } else {
+        return [];
+      }
+    } catch (e) {
+      print("Lỗi fetchUserRecommendations: $e");
+      return [];
+    }
+  }
+
+  Future<int?> createBorrowRequest(int userId, List<String> isbns) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/borrow-requests'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'user_id': userId,
+          'isbns': isbns,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes));
+        return data['request_id'];
+      } else {
+        throw Exception('Failed to create borrow request: ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Lỗi kết nối tới Server: $e');
+    }
+  }
+
+  Future<String> getBorrowRequestStatus(int requestId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/borrow-requests/$requestId'),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes));
+        return data['status']; // 'pending', 'approved', 'rejected'
+      }
+      return 'pending';
+    } catch (e) {
+      return 'pending';
+    }
+  }
+
+  Future<int?> createReturnRequest(int userId, List<String> isbns) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/return-requests'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'user_id': userId,
+          'isbns': isbns,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes));
+        return data['request_id'];
+      } else {
+        throw Exception('Failed to create return request: ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Lỗi kết nối tới Server: $e');
+    }
+  }
+
+  Future<String> getReturnRequestStatus(int requestId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/return-requests/$requestId'),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes));
+        return data['status']; // 'pending', 'approved', 'rejected'
+      }
+      return 'pending';
+    } catch (e) {
+      return 'pending';
+    }
+  }
+
+  Future<List<Book>> getRelatedBooks(int bookId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/books/$bookId/related'),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+        return data.map((json) => Book.fromJson(json)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching related books: $e');
+      return [];
+    }
+  }
+
+  // --- Comment APIs ---
+  Future<List<Map<String, dynamic>>> fetchBookComments(int bookId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/api/books/$bookId/comments')).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(json.decode(utf8.decode(response.bodyBytes)));
+      }
+      return [];
+    } catch (e) {
+      print("Error fetching comments: $e");
+      return [];
+    }
+  }
+
+  Future<bool> postComment(int userId, int bookId, String content, int rating) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/comments'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'user_id': userId,
+          'book_id': bookId,
+          'content': content,
+          'rating': rating,
+        }),
+      ).timeout(const Duration(seconds: 15));
+      return response.statusCode == 200;
+    } catch (e) {
+      print("Error posting comment: $e");
+      return false;
+    }
+  }
+
+  // --- Favorite APIs ---
+  Future<bool> toggleFavorite(int userId, int bookId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/favorites/toggle'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'user_id': userId,
+          'book_id': bookId,
+        }),
+      ).timeout(const Duration(seconds: 15));
+      return response.statusCode == 200;
+    } catch (e) {
+      print("Error toggling favorite: $e");
+      return false;
+    }
+  }
+
+  Future<bool> checkIsFavorite(int userId, int bookId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/api/users/$userId/favorites/$bookId')).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes));
+        return data['is_favorite'] ?? false;
+      }
+      return false;
+    } catch (e) {
+      print("Error checking favorite: $e");
+      return false;
     }
   }
 

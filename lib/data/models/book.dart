@@ -37,8 +37,8 @@ class Book {
           : (json['category'] is Map && json['category']['name'] != null) 
               ? json['category']['name'].toString() 
               : 'Thể loại khác',
-      locationZone: (json['location'] != null && json['location']['zone_name'] != null)
-          ? json['location']['zone_name'].toString()
+      locationZone: (json['location'] != null)
+          ? "${json['location']['zone_name'] ?? ''} - ${json['location']['shelf_id'] ?? ''} - Tầng ${json['location']['level_number'] ?? ''}"
           : '',
       marketPrice: json['market_price'] != null 
           ? double.tryParse(json['market_price'].toString()) ?? 0.0 

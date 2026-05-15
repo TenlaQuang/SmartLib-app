@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
-import 'presentation/screens/intro_screen.dart'; // Import màn hình vào đây
+import 'presentation/screens/intro_screen.dart';
+import 'services/api_service.dart';
 
 void main() {
+  // Bắt đầu timer đánh thức Render
+  ApiService().startKeepAliveTimer();
+  
   runApp(const SmartLibApp());
 }
 

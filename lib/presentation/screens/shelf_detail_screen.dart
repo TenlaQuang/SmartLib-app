@@ -5,7 +5,8 @@ import 'book_detail_screen.dart';
 
 class ShelfDetailScreen extends StatefulWidget {
   final String shelfId;
-  const ShelfDetailScreen({super.key, required this.shelfId});
+  final Map<String, dynamic>? userData;
+  const ShelfDetailScreen({super.key, required this.shelfId, this.userData});
 
   @override
   State<ShelfDetailScreen> createState() => _ShelfDetailScreenState();
@@ -99,52 +100,35 @@ class _ShelfDetailScreenState extends State<ShelfDetailScreen> {
             // Thanh gỗ kệ sách (Có chiều sâu)
             Column(
               children: [
+                const SizedBox(height: 100), // Khoảng trống cho sách đứng
                 Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 15),
-                  height: 18,
+                  height: 12,
+                  width: double.infinity,
+                  margin: const EdgeInsets.symmetric(horizontal: 10),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFA67C52), Color(0xFF8B5E3C)],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
+                    color: const Color(0xFF8B5A2B),
                     borderRadius: BorderRadius.circular(2),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.4), offset: const Offset(0, 6), blurRadius: 6)
-                    ],
+                      BoxShadow(color: Colors.black.withOpacity(0.4), offset: const Offset(0, 4), blurRadius: 6)
+                    ]
                   ),
                 ),
-                const SizedBox(height: 2), // Độ dày cạnh kệ
               ],
             ),
             
-            // Sách xếp đứng trên kệ
-            Padding(
-              padding: const EdgeInsets.only(bottom: 18, left: 25, right: 25),
-              child: SizedBox(
-                height: 110,
-                child: books.isEmpty 
-                  ? const Align(
-                      alignment: Alignment.bottomLeft,
-                      child: Padding(
-                        padding: EdgeInsets.only(bottom: 10),
-                        child: Text("Trống", style: TextStyle(color: Colors.brown, fontStyle: FontStyle.italic, fontWeight: FontWeight.w500)),
-                      ),
-                    )
-                  : ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: books.length,
-                      itemBuilder: (context, bIndex) {
-                        final book = books[bIndex];
-                        return _buildBookItem(book);
-                      },
-                    ),
+            // Danh sách sách (Nằm trên thanh gỗ)
+            Container(
+              height: 120,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: books.length,
+                itemBuilder: (context, idx) => _buildBookItem(books[idx]),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 50), // Khoảng cách giữa các hàng kệ
+        const SizedBox(height: 40),
       ],
     );
   }
@@ -158,7 +142,7 @@ class _ShelfDetailScreenState extends State<ShelfDetailScreen> {
         Navigator.push(
           context,
           PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => BookDetailScreen(book: book),
+            pageBuilder: (context, animation, secondaryAnimation) => BookDetailScreen(book: book, userData: widget.userData),
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
             },
