@@ -82,6 +82,7 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF7DD),
+      resizeToAvoidBottomInset: false, // Ngăn chặn sọc vàng khi bàn phím hiện lên
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onVerticalDragUpdate: (details) {
@@ -163,9 +164,9 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
                               child: Transform.translate(
                                 offset: Offset(-spreadOffset, 0),
                                 child: _buildActionButton(
-                                  title: "Nhập NFC",
+                                  title: "QUÉT THẺ NFC",
                                   icon: Icons.nfc_rounded,
-                                  color: const Color(0xFF91C4C3),
+                                  color: const Color(0xFF80A1BA), // Sử dụng màu xanh chủ đạo cho NFC
                                   onTap: () async {
                                     await _startNfcLogin();
                                   },
@@ -210,6 +211,15 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
     try {
       bool isAvailable = await NfcManager.instance.isAvailable();
       if (!isAvailable) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Thiết bị chưa bật NFC hoặc không hỗ trợ. Đang chuyển sang nhập tay..."),
+              backgroundColor: Colors.orangeAccent,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
         _showManualNfcDialog();
         return;
       }
@@ -311,33 +321,83 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
       context: context,
       isDismissible: true,
       enableDrag: false,
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      ),
       builder: (context) => Container(
-        height: 350,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        height: 420,
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Lottie.asset('assets/animations/books_open.json', width: 150, height: 150),
-            const SizedBox(height: 20),
-            const Text("Sẵn sàng quét", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF80A1BA))),
-            const SizedBox(height: 10),
-            const Text("Hãy đưa thẻ NFC lại gần mặt lưng điện thoại", style: TextStyle(color: Colors.grey)),
+            Container(
+              width: 40,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
             const SizedBox(height: 30),
-            TextButton(
-              onPressed: () {
-                NfcManager.instance.stopSession();
-                Navigator.pop(context);
-              },
-              child: const Text("Hủy bỏ", style: TextStyle(color: Colors.redAccent, fontSize: 16)),
+            const Text(
+              "Sẵn sàng quét thẻ",
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF80A1BA),
+                letterSpacing: 1.1,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              "Hãy áp thẻ SmartLib của bạn vào mặt lưng điện thoại để đăng nhập",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 16, height: 1.5),
+            ),
+            const Spacer(),
+            // Hiệu ứng quét thẻ NFC
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 140,
+                  height: 140,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF80A1BA).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                Lottie.asset(
+                  'assets/animations/books_open.json', // Có thể thay bằng animation sóng NFC nếu có
+                  width: 180,
+                  height: 180,
+                ),
+                const Icon(Icons.contactless_rounded, color: Color(0xFF80A1BA), size: 50),
+              ],
+            ),
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () {
+                  NfcManager.instance.stopSession();
+                  Navigator.pop(context);
+                },
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text(
+                  "Hủy bỏ",
+                  style: TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
             ),
           ],
         ),
       ),
-    );
+    ).then((_) {
+      NfcManager.instance.stopSession();
+    });
   }
 
   void _showLoginSuccess(String message, Map<String, dynamic> user) {

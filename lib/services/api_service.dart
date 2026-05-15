@@ -11,7 +11,7 @@ class ApiService {
     try {
       String url = '$baseUrl/api/books?page_size=100';
       if (search != null && search.isNotEmpty) {
-        url += '&q=$search';
+        url += '&search=$search';
       }
       final response = await http
           .get(Uri.parse(url))
