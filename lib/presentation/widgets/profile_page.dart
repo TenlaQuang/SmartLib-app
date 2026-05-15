@@ -75,8 +75,10 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
 
   Future<void> _loadActivity() async {
     try {
-      final userId = widget.userData['user_id'];
-      if (userId == null) throw Exception("Không tìm thấy ID người dùng");
+      final rawId = widget.userData['user_id'] ?? widget.userData['id'];
+      if (rawId == null) throw Exception("Không tìm thấy ID người dùng");
+      
+      final int userId = rawId is int ? rawId : int.parse(rawId.toString());
       
       final data = await _apiService.fetchUserActivity(userId);
       if (mounted) {
@@ -148,7 +150,9 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
         const SizedBox(height: 20),
         _buildInfoRow("Họ và Tên", widget.userData['full_name'] ?? 'N/A'),
         _buildInfoRow("Mã Sinh Viên", widget.userData['user_code'] ?? 'N/A'),
-        _buildInfoRow("User ID", widget.userData['user_id']?.toString() ?? 'N/A'),
+        _buildInfoRow("Email", widget.userData['email'] ?? 'Chưa cập nhật'),
+        _buildInfoRow("Số điện thoại", widget.userData['phone'] ?? 'Chưa cập nhật'),
+        _buildInfoRow("User ID", (widget.userData['user_id'] ?? widget.userData['id'] ?? 'N/A').toString()),
       ],
     );
   }

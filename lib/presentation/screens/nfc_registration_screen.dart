@@ -39,6 +39,8 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
         _userData = result;
         if (result['status'] == 'pending_nfc') {
           _isNfcScanning = true;
+          // Tự động bắt đầu quét NFC sau khi xác nhận thông tin thành công
+          Future.delayed(const Duration(milliseconds: 500), () => _startNfcScan());
         } else {
           _errorMessage = result['message'];
         }
@@ -448,7 +450,7 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
           child: ElevatedButton.icon(
             onPressed: _isLoading ? null : _startNfcScan,
             icon: const Icon(Icons.nfc_rounded, size: 28),
-            label: const Text("QUÉT THẺ NFC", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+            label: const Text("BẮT ĐẦU QUÉT LẠI", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF80A1BA),
               foregroundColor: Colors.white,
