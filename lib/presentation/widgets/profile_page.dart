@@ -189,6 +189,65 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     );
   }
 
+  Widget _buildFavoriteList() {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Text("Lỗi: $_error", style: const TextStyle(color: Colors.redAccent));
+    
+    final list = _activity?['favorites'] as List?;
+    
+    if (list == null || list.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(20.0),
+        child: Text("Bạn chưa có cuốn sách yêu thích nào.", style: TextStyle(color: Colors.grey, fontSize: 16)),
+      );
+    }
+    
+    return Column(
+      children: list.map((item) => _buildFavoriteItem(item)).toList(),
+    );
+  }
+
+  Widget _buildFavoriteItem(Map<String, dynamic> book) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.favorite_rounded,
+            color: Colors.redAccent,
+            size: 30,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  book['title'] ?? 'N/A',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  book['author'] ?? 'Không rõ tác giả',
+                  style: const TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+        ],
+      ),
+    );
+  }
+
   String _getAvatarLetter(String fullName) {
     if (fullName.isEmpty) return 'U';
     final parts = fullName.trim().split(' ');
@@ -361,9 +420,9 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                             Expanded(
                               child: _buildShelfCard(
                                 title: "Yêu thích",
-                                count: 0,
+                                count: _activity?['favorite_count'] ?? 0,
                                 color: const Color(0xFFE2B4B4),
-                                onTap: () {},
+                                onTap: () => _showBottomSheet("Sách yêu thích", _buildFavoriteList()),
                               ),
                             ),
                           ],

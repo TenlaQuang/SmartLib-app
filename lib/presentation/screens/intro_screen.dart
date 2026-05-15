@@ -143,18 +143,12 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
                         ),
                       ),
                       
-                      const SizedBox(height: 220), 
-                      Transform.translate(
-                        offset: Offset(spreadOffset, 0),
-                        child: Opacity(opacity: uiOpacity, child: const Text("Updated from library core just now", style: TextStyle(color: Color(0xFF80A1BA), fontSize: 13))),
-                      ),
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 350), 
+
+
                       
-                      Transform.translate(
-                        offset: Offset(0, spreadOffset),
-                        child: Opacity(opacity: uiOpacity, child: const VerificationBar()),
-                      ),
-                      const SizedBox(height: 20),
+
+
                       
                       Opacity(
                         opacity: uiOpacity,

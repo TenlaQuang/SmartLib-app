@@ -10,6 +10,17 @@ import 'book_detail_screen.dart';
 import '../../services/api_service.dart';
 import '../widgets/profile_page.dart';
 import '../widgets/scanner_page.dart';
+import 'intro_screen.dart';
+
+String optimizeCloudinaryUrl(String url, {int width = 400}) {
+  if (url.isEmpty) return url;
+  if (url.contains('res.cloudinary.com') && url.contains('/upload/')) {
+    if (!url.contains('/upload/q_auto')) {
+      return url.replaceFirst('/upload/', '/upload/q_auto,f_auto,w_$width/');
+    }
+  }
+  return url;
+}
 
 class HomeScreen extends StatefulWidget {
   final Map<String, dynamic>? userData;
@@ -23,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
   late Future<List<Book>> _weeklyFeaturedFuture;
   late Future<List<Map<String, dynamic>>> _categoriesWithBooksFuture;
+  late Future<List<Book>> _recommendationsFuture;
   late Future<List<dynamic>> _combinedLibraryFuture;
   int _selectedIndex = 0;
 
@@ -30,7 +42,20 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _weeklyFeaturedFuture = _apiService.fetchFeaturedWeeklyBooks();
       _categoriesWithBooksFuture = _apiService.fetchCategoriesWithBooks();
-      _combinedLibraryFuture = Future.wait([_weeklyFeaturedFuture, _categoriesWithBooksFuture]);
+      
+      final rawId = widget.userData?['user_id'] ?? widget.userData?['id'];
+      if (rawId != null) {
+        final int userId = rawId is int ? rawId : int.parse(rawId.toString());
+        _recommendationsFuture = _apiService.fetchUserRecommendations(userId);
+      } else {
+        _recommendationsFuture = Future.value([]);
+      }
+      
+      _combinedLibraryFuture = Future.wait([
+        _weeklyFeaturedFuture, 
+        _categoriesWithBooksFuture,
+        _recommendationsFuture
+      ]);
     });
   }
 
@@ -39,7 +64,20 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _weeklyFeaturedFuture = _apiService.fetchFeaturedWeeklyBooks();
     _categoriesWithBooksFuture = _apiService.fetchCategoriesWithBooks();
-    _combinedLibraryFuture = Future.wait([_weeklyFeaturedFuture, _categoriesWithBooksFuture]);
+    
+    final rawId = widget.userData?['user_id'] ?? widget.userData?['id'];
+    if (rawId != null) {
+      final int userId = rawId is int ? rawId : int.parse(rawId.toString());
+      _recommendationsFuture = _apiService.fetchUserRecommendations(userId);
+    } else {
+      _recommendationsFuture = Future.value([]);
+    }
+    
+    _combinedLibraryFuture = Future.wait([
+      _weeklyFeaturedFuture, 
+      _categoriesWithBooksFuture,
+      _recommendationsFuture
+    ]);
   }
 
   @override
@@ -65,10 +103,16 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _selectedIndex == 0
           ? _buildLibraryView()
           : _selectedIndex == 1
-              ? const ScannerPage()
+              ? ScannerPage(userData: widget.userData)
               : ProfilePage(
                   userData: widget.userData ?? {},
-                  onLogout: () => Navigator.pop(context),
+                  onLogout: () {
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (context) => const ProfessionalIntroScreen()),
+                      (route) => false,
+                    );
+                  },
                 ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -84,6 +128,9 @@ class _HomeScreenState extends State<HomeScreen> {
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
           onTap: (index) {
+            if (index == 0 && _selectedIndex != 0) {
+              _loadData(); // Tải lại dữ liệu khi quay về Thư viện
+            }
             setState(() {
               _selectedIndex = index;
             });
@@ -117,10 +164,10 @@ class _HomeScreenState extends State<HomeScreen> {
       future: _combinedLibraryFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
+          return SizedBox(
             width: double.infinity,
             height: double.infinity,
-            child: Center(child: CircularProgressIndicator(color: Color(0xFF91C4C3))),
+            child: const Center(child: CircularProgressIndicator(color: Color(0xFF91C4C3))),
           );
         }
         if (snapshot.hasError) {
@@ -131,9 +178,17 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         final data = snapshot.data ?? [];
-        if (data.length < 2) return const Center(child: Text("Lỗi dữ liệu"));
+        if (data.length < 3) return const Center(child: Text("Lỗi dữ liệu"));
         final weeklyBooks = data[0] as List<Book>;
         final categoryGroups = data[1] as List<Map<String, dynamic>>;
+        
+        // Lọc những quyển đã có trong weeklyBooks và giới hạn 3 cuốn
+        final weeklyIds = weeklyBooks.map((b) => b.id).toSet();
+        final rawRecommendations = data[2] as List<Book>;
+        final userRecommendations = rawRecommendations
+            .where((b) => !weeklyIds.contains(b.id))
+            .take(3)
+            .toList();
 
         return SingleChildScrollView(
           key: const ValueKey('library_content_scroll_view'),
@@ -144,29 +199,17 @@ class _HomeScreenState extends State<HomeScreen> {
               // 1. Sách được đọc nhiều nhất trong tuần
               _buildFeaturedSection(weeklyBooks),
 
-              // 2. Có thể bạn sẽ thích
-              _buildHorizontalList(
-                "Có thể bạn sẽ thích", 
-                [],
-                icon: Icons.thumb_up_alt_rounded,
-                color: Colors.orangeAccent,
-              ),
+              // 2. Gợi ý dành riêng cho bạn (Chỉ hiện khi có data)
+              if (userRecommendations.isNotEmpty)
+                _buildFixedRecommendationList(
+                  "Gợi ý dành riêng cho bạn", 
+                  userRecommendations,
+                ),
 
-              // 3. Từng tủ sách (Theo Category)
-              ...categoryGroups.asMap().entries.map((entry) {
-                 final index = entry.key;
-                 final group = entry.value;
-                 final categoryName = group['category_name'].toString();
-                 
-                 return _buildHorizontalList(
-                   "Khu ${index + 1}", 
-                   group['books'] as List<Book>,
-                   icon: _getIconForCategory(categoryName),
-                   color: _getColorForIndex(index),
-                 );
-              }),
+              // 3. Câu châm ngôn mỗi ngày (Cuốn sách mở)
+              const DailyQuoteWidget(),
               
-              const SizedBox(height: 30),
+              const SizedBox(height: 40),
             ],
           ),
         );
@@ -203,7 +246,46 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildFeaturedSection(List<Book> books) {
     return Container(
       padding: const EdgeInsets.all(20),
-      child: FeaturedCarousel(books: books),
+      child: FeaturedCarousel(books: books, userData: widget.userData),
+    );
+  }
+
+  Widget _buildFixedRecommendationList(String title, List<Book> books) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(color: const Color(0xFF91C4C3).withOpacity(0.2)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            title.toUpperCase(),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.lato(
+              fontSize: 12, 
+              fontWeight: FontWeight.w900, 
+              color: const Color(0xFF80A1BA),
+              letterSpacing: 2.0,
+            ),
+          ),
+          const SizedBox(height: 15),
+          Container(
+            height: 155, // Giảm kích thước sách xuống mức nhỏ xinh
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: books.take(3).map((book) => Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8), // Tăng khoảng cách để trông thoáng hơn
+                  child: _buildBookCard(book, width: null, marginEnd: 0, showDetails: false, borderRadius: 2), // Bo góc cực nhẹ cho tinh tế
+                ),
+              )).toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -252,7 +334,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (index == books.length) {
                     return _buildSeeMoreButton(title);
                   }
-                  return _buildBookCard(books[index]);
+                  return _buildBookCard(books[index], showAuthor: false);
                 },
               ),
             ),
@@ -296,13 +378,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
 
 
-  Widget _buildBookCard(Book book) {
+  Widget _buildBookCard(Book book, {
+    double? width = 150, 
+    double marginEnd = 15, 
+    bool showDetails = true, 
+    bool showAuthor = true,
+    double borderRadius = 15
+  }) {
     return InkWell(
       onTap: () {
         Navigator.push(
           context,
           PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => BookDetailScreen(book: book),
+            pageBuilder: (context, animation, secondaryAnimation) => BookDetailScreen(book: book, userData: widget.userData),
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(
                 opacity: animation,
@@ -313,13 +401,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       },
-      borderRadius: BorderRadius.circular(15),
+      borderRadius: BorderRadius.circular(borderRadius),
       child: Container(
-        width: 150,
-        margin: const EdgeInsets.only(right: 15),
+        width: width,
+        margin: EdgeInsets.only(right: marginEnd),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(borderRadius),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.08),
@@ -344,54 +432,38 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             // Thông tin sách
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    book.title,
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    book.categoryName,
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 12,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: (book.status.toLowerCase() == "có sẵn" || book.status.toLowerCase() == "available")
-                          ? Colors.green.withOpacity(0.15) 
-                          : Colors.orange.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      (book.status.toLowerCase() == "có sẵn" || book.status.toLowerCase() == "available") ? "Có sẵn" : book.status,
-                      style: TextStyle(
-                        color: (book.status.toLowerCase() == "có sẵn" || book.status.toLowerCase() == "available")
-                            ? Colors.green[700] 
-                            : Colors.orange[800],
-                        fontSize: 10,
+            if (showDetails)
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      book.title,
+                      style: const TextStyle(
+                        color: Colors.black87,
                         fontWeight: FontWeight.bold,
+                        fontSize: 14,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  )
-                ],
-              ),
-            )
+                    if (showAuthor) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        book.author,
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              )
           ],
         ),
       ),
@@ -401,7 +473,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBookImage(Book book) {
     String finalUrl = '';
     if (book.imageUrl != null && book.imageUrl!.isNotEmpty) {
-      finalUrl = book.imageUrl!;
+      finalUrl = optimizeCloudinaryUrl(book.imageUrl!, width: 300);
     } else if (book.isbn.isNotEmpty) {
       finalUrl = 'https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg';
     }
@@ -428,7 +500,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class FeaturedCarousel extends StatefulWidget {
   final List<Book> books;
-  const FeaturedCarousel({super.key, required this.books});
+  final Map<String, dynamic>? userData;
+  const FeaturedCarousel({super.key, required this.books, this.userData});
 
   @override
   State<FeaturedCarousel> createState() => _FeaturedCarouselState();
@@ -618,7 +691,7 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> with SingleTickerPr
                       child: Container(
                         decoration: BoxDecoration(
                           image: DecorationImage(
-                            image: NetworkImage(currentBook.imageUrl!),
+                            image: NetworkImage(optimizeCloudinaryUrl(currentBook.imageUrl!, width: 600)),
                             fit: BoxFit.cover,
                             alignment: const Alignment(0, -0.6), 
                             colorFilter: ColorFilter.mode(_currentDominantColor.withOpacity(0.5), BlendMode.srcOver),
@@ -636,7 +709,7 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> with SingleTickerPr
                     Navigator.push(
                       context,
                       PageRouteBuilder(
-                        pageBuilder: (context, animation, secondaryAnimation) => BookDetailScreen(book: currentBook),
+                        pageBuilder: (context, animation, secondaryAnimation) => BookDetailScreen(book: currentBook, userData: widget.userData),
                         transitionsBuilder: (context, animation, secondaryAnimation, child) {
                           return FadeTransition(opacity: animation, child: child);
                         },
@@ -735,7 +808,7 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> with SingleTickerPr
                                       aspectRatio: 2/3,
                                       child: (book.imageUrl != null && book.imageUrl!.isNotEmpty) 
                                         ? Image.network(
-                                            book.imageUrl!,
+                                            optimizeCloudinaryUrl(book.imageUrl!, width: 400),
                                             fit: BoxFit.cover,
                                             errorBuilder: (context, e, s) => Container(
                                               color: Colors.grey[200], 
@@ -797,7 +870,7 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> with SingleTickerPr
                       Text(
                         currentBook.title, 
                         style: GoogleFonts.playfairDisplay(
-                          fontSize: 22, 
+                          fontSize: 24, 
                           fontWeight: FontWeight.w900, // Đậm nét hơn
                           color: Colors.black, // Đổi sang màu đen tuyền để chữ nổi bật hẳn
                           height: 1.2,
@@ -821,7 +894,7 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> with SingleTickerPr
                       Text(
                         currentBook.author,
                         style: GoogleFonts.lato(
-                          fontSize: 14, 
+                          fontSize: 16, 
                           color: Colors.black87, 
                           fontWeight: FontWeight.w800, // Tăng độ đậm
                           fontStyle: FontStyle.italic,
@@ -830,28 +903,6 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> with SingleTickerPr
                         overflow: TextOverflow.ellipsis,
                       ),
                       Colors.black87,
-                    ),
-                    const SizedBox(height: 12),
-                    // Mô tả (2 dòng)
-                    _buildSparkleText(
-                      Text(
-                        currentBook.description.isNotEmpty ? currentBook.description : "Chưa có mô tả cho cuốn sách này.",
-                        style: const TextStyle(fontSize: 13, color: Color(0xFF2D3142), height: 1.5, fontWeight: FontWeight.w500),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const Color(0xFF2D3142),
-                    ),
-                    const SizedBox(height: 12),
-                    // Số trang và thể loại
-                    _buildSparkleText(
-                      Text(
-                        "Số trang: ${currentBook.pages > 0 ? currentBook.pages : 'N/A'} • Thể loại: ${currentBook.categoryName}",
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF1E2130), fontWeight: FontWeight.w700),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const Color(0xFF1E2130),
                     ),
                     const SizedBox(height: 3), // Thêm khoảng trống ở dưới để đẩy chữ lên trên
                   ],
@@ -889,6 +940,169 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> with SingleTickerPr
           ),
         ),
       ],
+    );
+  }
+}
+
+// --- WIDGET CÂU CHÂM NGÔN MỖI NGÀY (CUỐN SÁCH MỞ + LẬT TRANG 3D) ---
+class DailyQuoteWidget extends StatefulWidget {
+  const DailyQuoteWidget({super.key});
+
+  @override
+  State<DailyQuoteWidget> createState() => _DailyQuoteWidgetState();
+}
+
+class _DailyQuoteWidgetState extends State<DailyQuoteWidget> with SingleTickerProviderStateMixin {
+  int _currentIndex = 0;
+  final List<String> _quotes = [
+    "Sách là nguồn tri thức bất tận của nhân loại.",
+    "Một cuốn sách hay là một người bạn tốt.",
+    "Việc đọc rất quan trọng. Nếu bạn biết cách đọc, cả thế giới sẽ mở ra cho bạn.",
+    "Sách mở ra những chân trời mới cho tâm hồn.",
+    "Càng đọc nhiều, bạn càng biết nhiều. Càng học nhiều, bạn càng đi xa hơn.",
+    "Đọc sách là cách tốt nhất để du lịch mà không cần di chuyển.",
+    "Không có người bạn nào trung thành như một cuốn sách.",
+    "Một ngôi nhà không có sách là một ngôi nhà không có cửa sổ.",
+    "Sách là những người bạn yên tĩnh nhất và trung thành nhất.",
+    "Đọc sách là trò chuyện với những trí tuệ tuyệt vời nhất của nhân loại.",
+  ];
+
+  late Timer _timer;
+  late AnimationController _flipController;
+  bool _isFlipping = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _flipController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    _timer = Timer.periodic(const Duration(seconds: 7), (timer) {
+      if (mounted) _startFlip();
+    });
+  }
+
+  void _startFlip() {
+    setState(() {
+      _currentIndex = (_currentIndex + 1) % _quotes.length;
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    _flipController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const double bookWidth = 280.0;
+    const double bookHeight = 140.0;
+    const Color ancientColor = Color(0xFFE8D9AC);
+    const Color darkAncientColor = Color(0xFFD2B48C);
+    const Color textColor = Color(0xFF3E2723);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        children: [
+          const SizedBox(height: 10),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              // 1. Bóng đổ 3D (Cần có color thì BoxShadow mới hoạt động)
+              Container(
+                width: bookWidth - 20,
+                height: bookHeight - 15,
+                decoration: BoxDecoration(
+                  color: Colors.black, // Bắt buộc phải có màu nền
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 25, offset: const Offset(0, 15)),
+                    BoxShadow(color: Colors.brown.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5)),
+                  ],
+                ),
+              ),
+              // 2. Cuốn sách (Nền tĩnh)
+              Container(
+                width: bookWidth,
+                height: bookHeight,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  gradient: const LinearGradient(
+                    colors: [ancientColor, darkAncientColor, ancientColor],
+                    stops: [0.46, 0.5, 0.54],
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    // Trang trái: Tiêu đề cố định
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border(right: BorderSide(color: Colors.black.withOpacity(0.05), width: 1)),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text("CHÂM NGÔN\nMỖI NGÀY", textAlign: TextAlign.center,
+                              style: GoogleFonts.lato(fontSize: 8, fontWeight: FontWeight.w900, color: textColor.withOpacity(0.6), letterSpacing: 1.2),
+                            ),
+                            const SizedBox(height: 8),
+                            Icon(Icons.auto_stories_rounded, color: textColor.withOpacity(0.2), size: 35),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // Trang phải: Châm ngôn (Lật 3D tại chỗ)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 1000),
+                          transitionBuilder: (Widget child, Animation<double> animation) {
+                            final rotate = Tween(begin: math.pi, end: 0.0).animate(animation);
+                            return AnimatedBuilder(
+                              animation: rotate,
+                              child: child,
+                              builder: (context, child) {
+                                final isUnder = (ValueKey(_currentIndex) != child!.key);
+                                var tilt = ((animation.value - 0.5).abs() - 0.5) * 0.003;
+                                tilt *= isUnder ? -1.0 : 1.0;
+                                final value = isUnder ? math.min(rotate.value, math.pi / 2) : rotate.value;
+                                return Transform(
+                                  transform: Matrix4.rotationY(value)..setEntry(3, 2, tilt),
+                                  alignment: Alignment.center,
+                                  child: child,
+                                );
+                              },
+                            );
+                          },
+                          child: Center(
+                            key: ValueKey<int>(_currentIndex),
+                            child: Text(
+                              _quotes[_currentIndex],
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.philosopher(fontSize: 12, fontStyle: FontStyle.italic, color: textColor, fontWeight: FontWeight.bold, height: 1.4),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Gáy sách
+              Container(width: 1, height: bookHeight, color: Colors.black.withOpacity(0.1)),
+            ],
+          ),
+          const SizedBox(height: 40),
+        ],
+      ),
     );
   }
 }

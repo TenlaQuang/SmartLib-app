@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../services/api_service.dart';
 import '../../data/models/book.dart';
+import 'dart:convert';
 
 class ScannerPage extends StatefulWidget {
-  const ScannerPage({super.key});
+  final Map<String, dynamic>? userData;
+  const ScannerPage({super.key, this.userData});
 
   @override
   State<ScannerPage> createState() => _ScannerPageState();
@@ -27,6 +29,9 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
   
   // Biến cờ để chống việc xử lý quét liên tục cùng 1 lúc
   bool _isProcessing = false;
+
+  // Chế độ Mượn hoặc Trả sách
+  bool _isReturnMode = false;
 
   late AnimationController _animationController;
   late Animation<Offset> _slideAnimation;
@@ -85,20 +90,45 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
         // Fetch book info from API
         final books = await _apiService.fetchBooks(search: newIsbn);
         if (books.isNotEmpty) {
-          final book = books.first;
-          setState(() {
-            _scannedIsbns.add(newIsbn!);
-            _scannedBooks.add(book);
-          });
-          
-          // Phát âm thanh & rung khi quét thành công 1 cuốn mới
-          SystemSound.play(SystemSoundType.click);
-          HapticFeedback.vibrate();
+          if (_isReturnMode) {
+            // Chế độ Trả sách: cho phép quét bất kỳ sách nào có trong DB
+            // (Backend sẽ kiểm tra xem User có đang mượn sách này không)
+            final book = books.first;
+            setState(() {
+              _scannedIsbns.add(newIsbn!);
+              _scannedBooks.add(book);
+            });
+            SystemSound.play(SystemSoundType.click);
+            HapticFeedback.vibrate();
+          } else {
+            // Chế độ Mượn sách: Chỉ lấy những cuốn sách đang 'available'
+            final availableBooks = books.where((b) => b.status == 'available').toList();
+
+            if (availableBooks.isNotEmpty) {
+              final book = availableBooks.first;
+              setState(() {
+                _scannedIsbns.add(newIsbn!);
+                _scannedBooks.add(book);
+              });
+              SystemSound.play(SystemSoundType.click);
+              HapticFeedback.vibrate();
+            } else {
+              // Sách có trong hệ thống nhưng không còn cuốn nào rảnh
+              _scannedIsbns.add(newIsbn!);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Sách này hiện đã được mượn hết hoặc không có sẵn!"),
+                    duration: Duration(seconds: 3),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            }
+          }
         } else {
-          // Nếu không tìm thấy sách, vẫn thêm vào set để không quét lại liên tục, 
-          // nhưng không hiển thị trong list.
-          // Hoặc có thể hiện thông báo lỗi.
-          _scannedIsbns.add(newIsbn);
+          // Nếu không tìm thấy sách, vẫn thêm vào set để không quét lại liên tục
+          _scannedIsbns.add(newIsbn!);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -127,30 +157,128 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
     }
   }
 
-  void _submitBorrowRequest() {
+  void _submitRequest() async {
     if (_scannedBooks.isEmpty) return;
 
-    // TODO: Thực tế sẽ gọi API ở đây. Hiện tại chỉ giả lập UI.
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      if (widget.userData == null) {
+        throw Exception('Vui lòng đăng nhập để thao tác.');
+      }
+      
+      final userId = widget.userData!['user_id'] ?? widget.userData!['id'];
+      
+      if (userId == null) {
+        throw Exception('Không tìm thấy thông tin người dùng.');
+      }
+
+      List<String> isbns = _scannedBooks.map((b) => b.isbn).toList();
+      
+      final requestId = _isReturnMode 
+          ? await _apiService.createReturnRequest(userId, isbns)
+          : await _apiService.createBorrowRequest(userId, isbns);
+
+      if (requestId != null && mounted) {
+        _showWaitingDialog(requestId);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Lỗi: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    } finally {
+      setState(() {
+        _isProcessing = false;
+      });
+    }
+  }
+
+  void _showWaitingDialog(int requestId) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Thành công", style: TextStyle(color: Color(0xFF91C4C3))),
-        content: Text("Đã gửi yêu cầu mượn ${_scannedBooks.length} cuốn sách lên hệ thống."),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Đóng hộp thoại
-              setState(() {
-                _scannedIsbns.clear();
-                _scannedBooks.clear();
-              });
-            },
-            child: const Text("Đóng", style: TextStyle(color: Color(0xFF80A1BA), fontWeight: FontWeight.bold)),
-          )
-        ],
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Column(
+            children: [
+              SizedBox(
+                width: 60,
+                height: 60,
+                child: CircularProgressIndicator(
+                  color: Color(0xFF91C4C3),
+                  strokeWidth: 5,
+                ),
+              ),
+              SizedBox(height: 20),
+              Text(
+                "Đang chờ duyệt...",
+                style: TextStyle(color: Color(0xFF91C4C3), fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: const Text(
+            "Vui lòng gửi sách cho thủ thư và chờ duyệt.",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16),
+          ),
+        ),
       ),
     );
+
+    // Bắt đầu vòng lặp kiểm tra trạng thái (polling)
+    _startPolling(requestId);
+  }
+
+  void _startPolling(int requestId) async {
+    bool isApproved = false;
+    
+    while (!isApproved && mounted) {
+      await Future.delayed(const Duration(seconds: 3)); // Kiểm tra mỗi 3 giây
+      
+      try {
+        final status = _isReturnMode 
+            ? await _apiService.getReturnRequestStatus(requestId)
+            : await _apiService.getBorrowRequestStatus(requestId);
+            
+        if (status == 'approved') {
+          isApproved = true;
+        } else if (status == 'rejected') {
+          // Nếu bị từ chối, có thể hiện thông báo rồi đóng
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Yêu cầu của bạn đã bị từ chối."), backgroundColor: Colors.orange),
+            );
+          }
+          return;
+        }
+      } catch (e) {
+        // Bỏ qua lỗi kết nối trong lúc polling
+      }
+    }
+
+    if (isApproved && mounted) {
+      Navigator.pop(context); // Đóng Dialog chờ
+      
+      // Hiện thông báo thành công ngắn gọn
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_isReturnMode ? "Yêu cầu trả sách đã được duyệt thành công!" : "Yêu cầu mượn sách đã được duyệt thành công!"),
+          backgroundColor: const Color(0xFF91C4C3),
+        ),
+      );
+
+      setState(() {
+        _scannedIsbns.clear();
+        _scannedBooks.clear();
+      });
+    }
   }
 
   @override
@@ -171,9 +299,89 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
             ),
           ),
           
-          // Khung ngắm viền mỏng (Căn lên trên để không bị list che)
           Positioned(
-            top: screenHeight * 0.10,
+            top: screenHeight * 0.06,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                width: 220, // Kích thước cố định cho hiệu ứng trượt
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: Colors.white12, width: 1),
+                ),
+                child: Stack(
+                  children: [
+                    // Khối màu trượt (Chung 1 màu Teal)
+                    AnimatedAlign(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      alignment: _isReturnMode ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        width: 110,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF91C4C3),
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                      ),
+                    ),
+                    // Chữ phía trên
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() {
+                              _isReturnMode = false;
+                              _scannedIsbns.clear();
+                              _scannedBooks.clear();
+                            }),
+                            child: Container(
+                              color: Colors.transparent,
+                              alignment: Alignment.center,
+                              child: Text(
+                                "Mượn sách",
+                                style: TextStyle(
+                                  color: !_isReturnMode ? Colors.white : Colors.white70,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() {
+                              _isReturnMode = true;
+                              _scannedIsbns.clear();
+                              _scannedBooks.clear();
+                            }),
+                            child: Container(
+                              color: Colors.transparent,
+                              alignment: Alignment.center,
+                              child: Text(
+                                "Trả sách",
+                                style: TextStyle(
+                                  color: _isReturnMode ? Colors.white : Colors.white70,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Khung ngắm viền mỏng (Căn xuống một chút để nhường chỗ cho nút gạt)
+          Positioned(
+            top: screenHeight * 0.15,
             left: 0,
             right: 0,
             child: Center(
@@ -194,7 +402,7 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
           
           // Dòng chữ hướng dẫn
           Positioned(
-            top: screenHeight * 0.10 + 170, // Đặt ngay dưới khung ngắm
+            top: screenHeight * 0.15 + 170, // Đặt ngay dưới khung ngắm
             left: 0,
             right: 0,
             child: const Text(
@@ -217,7 +425,7 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
             child: SlideTransition(
               position: _slideAnimation,
               child: Container(
-                height: screenHeight * 0.6, // Chiếm 60% màn hình
+                height: screenHeight * 0.53, // Giảm từ 60% xuống 55% để sít xuống dưới hơn
                 width: double.infinity,
                 decoration: const BoxDecoration(
                 color: Color(0xFFFFF7DD),
@@ -294,26 +502,25 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
                   // Nút Gửi yêu cầu cố định ở đáy
                   Container(
                     padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))
-                      ],
-                    ),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _scannedBooks.isNotEmpty ? const Color(0xFF80A1BA) : Colors.grey[400],
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                          elevation: _scannedBooks.isNotEmpty ? 3 : 0,
-                        ),
-                        onPressed: _scannedBooks.isNotEmpty ? _submitBorrowRequest : null,
-                        child: const Text(
-                          "GỬI YÊU CẦU MƯỢN SÁCH",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                    child: Center(
+                      child: SizedBox(
+                        width: MediaQuery.of(context).size.width * 0.8,
+                        height: 50,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _isReturnMode ? const Color(0xFF3E2723) : const Color(0xFF80A1BA),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                            elevation: _scannedBooks.isNotEmpty ? 5 : 0,
+                          ),
+                          onPressed: _scannedBooks.isNotEmpty ? _submitRequest : null,
+                          child: Opacity(
+                            opacity: _scannedBooks.isNotEmpty ? 1.0 : 0.5,
+                            child: Text(
+                              _isReturnMode ? "GỬI YÊU CẦU TRẢ SÁCH" : "GỬI YÊU CẦU MƯỢN SÁCH",
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                            ),
+                          ),
                         ),
                       ),
                     ),
