@@ -242,29 +242,33 @@ class ApiService {
       // Lấy 5 category đầu tiên
       final topCategories = catData.take(5).toList();
       
-      List<Map<String, dynamic>> result = [];
-      
-      for (var cat in topCategories) {
+      // Khởi tạo List các Future để gọi song song
+      List<Future<Map<String, dynamic>?>> fetchFutures = topCategories.map((cat) async {
         final catId = cat['category_id'];
         final catName = cat['name'] ?? 'Thể loại khác';
         
-        // Fetch 5 books for this category
-        final booksResponse = await http.get(Uri.parse('$baseUrl/api/books?category_id=$catId&page_size=5')).timeout(const Duration(seconds: 10));
-        if (booksResponse.statusCode == 200) {
-          final Map<String, dynamic> booksResult = json.decode(utf8.decode(booksResponse.bodyBytes));
-          final List<dynamic> booksData = booksResult['data'] ?? [];
-          final books = booksData.map((json) => Book.fromJson(json)).toList();
-          
-          if (books.isNotEmpty) {
-            result.add({
-              'category_id': catId,
-              'category_name': catName.toString(),
-              'books': books
-            });
+        try {
+          final booksResponse = await http.get(Uri.parse('$baseUrl/api/books?category_id=$catId&page_size=5')).timeout(const Duration(seconds: 10));
+          if (booksResponse.statusCode == 200) {
+            final Map<String, dynamic> booksResult = json.decode(utf8.decode(booksResponse.bodyBytes));
+            final List<dynamic> booksData = booksResult['data'] ?? [];
+            final books = booksData.map((json) => Book.fromJson(json)).toList();
+            
+            if (books.isNotEmpty) {
+              return {
+                'category_id': catId,
+                'category_name': catName.toString(),
+                'books': books
+              };
+            }
           }
-        }
-      }
-      return result;
+        } catch (_) {}
+        return null;
+      }).toList();
+
+      final results = await Future.wait(fetchFutures);
+      
+      return results.whereType<Map<String, dynamic>>().toList();
     } catch (e) {
       return [];
     }
@@ -470,6 +474,34 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Lỗi kết nối: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> updateUserSecure({
+    required int userId,
+    required String email,
+    required String phoneNumber,
+    required String nfcSerial,
+  }) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/users/$userId/update-secure'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'email': email,
+          'phone_number': phoneNumber,
+          'nfc_serial': nfcSerial,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      final responseData = json.decode(utf8.decode(response.bodyBytes));
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': responseData['message'] ?? 'Thành công!'};
+      } else {
+        return {'success': false, 'message': responseData['detail'] ?? 'Cập nhật thất bại!'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Lỗi kết nối: $e'};
     }
   }
 }

@@ -22,6 +22,9 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   Map<String, dynamic>? _activity;
   String? _error;
 
+  String? _currentEmail;
+  String? _currentPhone;
+
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideUpAnimation;
@@ -34,6 +37,10 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   void initState() {
     super.initState();
     _loadActivity();
+
+    // Khởi động email & số điện thoại động từ dữ liệu đăng nhập
+    _currentEmail = widget.userData['email'] ?? widget.userData['email_address'];
+    _currentPhone = widget.userData['phone_number'] ?? widget.userData['phone'];
     
     _animationController = AnimationController(
       vsync: this,
@@ -150,9 +157,8 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
         const SizedBox(height: 20),
         _buildInfoRow("Họ và Tên", widget.userData['full_name'] ?? 'N/A'),
         _buildInfoRow("Mã Sinh Viên", widget.userData['user_code'] ?? 'N/A'),
-        _buildInfoRow("Email", widget.userData['email'] ?? 'Chưa cập nhật'),
-        _buildInfoRow("Số điện thoại", widget.userData['phone'] ?? 'Chưa cập nhật'),
-        _buildInfoRow("User ID", (widget.userData['user_id'] ?? widget.userData['id'] ?? 'N/A').toString()),
+        _buildInfoRow("Email", _currentEmail ?? 'Chưa cập nhật'),
+        _buildInfoRow("Số điện thoại", _currentPhone ?? 'Chưa cập nhật'),
       ],
     );
   }
@@ -440,7 +446,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                         _buildActionRow(
                           icon: Icons.settings_rounded,
                           title: "Cài đặt tài khoản",
-                          onTap: () {},
+                          onTap: _showAccountSettings,
                         ),
 
                         const Spacer(),
@@ -733,6 +739,349 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
             ),
         ],
       ),
+    );
+  }
+
+  void _showAccountSettings() {
+    _showBottomSheet(
+      "Cài đặt tài khoản",
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Chọn thông tin liên hệ bạn muốn thay đổi. Hệ thống yêu cầu xác thực thẻ NFC chính chủ.",
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+          const SizedBox(height: 25),
+          
+          // Lựa chọn 1: Cập nhật Email
+          _buildSettingsOption(
+            icon: Icons.alternate_email_rounded,
+            title: "Cập nhật địa chỉ Email",
+            subtitle: _currentEmail ?? "Chưa cập nhật",
+            onTap: () {
+              Navigator.pop(context); // Đóng menu cài đặt
+              _showEditFieldBottomSheet(
+                title: "Cập nhật địa chỉ Email",
+                hint: "Nhập địa chỉ email mới",
+                initialValue: _currentEmail ?? "",
+                isEmail: true,
+              );
+            },
+          ),
+          const Divider(height: 25),
+          
+          // Lựa chọn 2: Cập nhật Số điện thoại
+          _buildSettingsOption(
+            icon: Icons.phone_android_rounded,
+            title: "Cập nhật Số điện thoại",
+            subtitle: _currentPhone ?? "Chưa cập nhật",
+            onTap: () {
+              Navigator.pop(context); // Đóng menu cài đặt
+              _showEditFieldBottomSheet(
+                title: "Cập nhật Số điện thoại",
+                hint: "Nhập số điện thoại mới",
+                initialValue: _currentPhone ?? "",
+                isEmail: false,
+              );
+            },
+          ),
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 8.0),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF80A1BA).withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: const Color(0xFF80A1BA), size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF3E2723)),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditFieldBottomSheet({
+    required String title,
+    required String hint,
+    required String initialValue,
+    required bool isEmail,
+  }) {
+    final controller = TextEditingController(text: initialValue);
+
+    _showBottomSheet(
+      title,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isEmail 
+              ? "Vui lòng nhập địa chỉ email mới của bạn. Thẻ NFC sẽ được yêu cầu để xác thực danh tính."
+              : "Vui lòng nhập số điện thoại mới của bạn. Thẻ NFC sẽ được yêu cầu để xác thực danh tính.",
+            style: const TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+          const SizedBox(height: 20),
+          
+          TextField(
+            controller: controller,
+            keyboardType: isEmail ? TextInputType.emailAddress : TextInputType.phone,
+            decoration: InputDecoration(
+              hintText: hint,
+              prefixIcon: Icon(isEmail ? Icons.email_outlined : Icons.phone_outlined, color: const Color(0xFF80A1BA)),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+          ),
+          const SizedBox(height: 30),
+          
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF80A1BA),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                elevation: 3,
+              ),
+              onPressed: () {
+                final newValue = controller.text.trim();
+                if (newValue.isEmpty) return;
+                
+                // Đóng bottom sheet sửa đổi
+                Navigator.pop(context);
+                
+                // Mở popup xác thực NFC bảo mật
+                _showNfcVerificationDialog(
+                  newEmail: isEmail ? newValue : (_currentEmail ?? ""),
+                  newPhone: isEmail ? (_currentPhone ?? "") : newValue,
+                );
+              },
+              child: const Text("TIẾN HÀNH XÁC THỰC", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  void _showNfcVerificationDialog({required String newEmail, required String newPhone}) {
+    final String correctNfc = widget.userData['nfc_tag_id'] ?? widget.userData['nfc_serial'] ?? 'NFC_TEST_123';
+    bool isVerifying = false;
+    String? errorMessage;
+    bool isSuccess = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isSuccess) ...[
+                    const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF91C4C3), size: 70),
+                    const SizedBox(height: 15),
+                    const Text("Xác thực thành công", style: TextStyle(color: Color(0xFF91C4C3), fontWeight: FontWeight.bold, fontSize: 20)),
+                  ] else if (isVerifying) ...[
+                    const SizedBox(
+                      width: 60,
+                      height: 60,
+                      child: CircularProgressIndicator(color: Color(0xFF80A1BA), strokeWidth: 5),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text("Đang kiểm tra bảo mật...", style: TextStyle(color: Color(0xFF80A1BA), fontWeight: FontWeight.bold, fontSize: 18)),
+                  ] else ...[
+                    const Icon(Icons.nfc_rounded, color: Color(0xFF80A1BA), size: 70),
+                    const SizedBox(height: 15),
+                    const Text("Xác thực thẻ NFC", style: TextStyle(color: Color(0xFF3E2723), fontWeight: FontWeight.bold, fontSize: 20)),
+                  ]
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isSuccess)
+                    const Text("Thông tin cá nhân của bạn đã được cập nhật an toàn lên hệ thống.", textAlign: TextAlign.center, style: TextStyle(fontSize: 15))
+                  else if (isVerifying)
+                    const Text("Đang đối chiếu thẻ NFC vật lý với tài khoản cơ sở dữ liệu...", textAlign: TextAlign.center, style: TextStyle(fontSize: 15))
+                  else ...[
+                    const Text(
+                      "Vui lòng đặt thẻ thư viện NFC của bạn gần đầu đọc để xác thực quyền thay đổi thông tin liên lạc.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 15),
+                    ),
+                    if (errorMessage != null) ...[
+                      const SizedBox(height: 15),
+                      Text(
+                        errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ],
+                  ]
+                ],
+              ),
+              actionsAlignment: MainAxisAlignment.center,
+              actions: [
+                if (isSuccess)
+                  TextButton(
+                    style: TextButton.styleFrom(foregroundColor: const Color(0xFF91C4C3)),
+                    onPressed: () {
+                      Navigator.pop(dialogContext); // đóng dialog
+                    },
+                    child: const Text("HOÀN TẤT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  )
+                else if (!isVerifying) ...[
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Nút mô phỏng THẺ ĐÚNG (success flow)
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.credit_card_rounded, color: Color(0xFF91C4C3)),
+                          label: const Text("Quẹt thẻ NFC (Thẻ Hợp Lệ)", style: TextStyle(color: Color(0xFF91C4C3))),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFF91C4C3)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () async {
+                            setDialogState(() {
+                              isVerifying = true;
+                              errorMessage = null;
+                            });
+                            
+                            // Gọi API xác thực
+                            final rawId = widget.userData['user_id'] ?? widget.userData['id'];
+                            final int userId = rawId is int ? rawId : int.parse(rawId.toString());
+
+                            final res = await _apiService.updateUserSecure(
+                              userId: userId,
+                              email: newEmail,
+                              phoneNumber: newPhone,
+                              nfcSerial: correctNfc,
+                            );
+
+                            if (res['success'] == true) {
+                              // Cập nhật state chính
+                              setState(() {
+                                _currentEmail = newEmail;
+                                _currentPhone = newPhone;
+                              });
+                              setDialogState(() {
+                                isVerifying = false;
+                                isSuccess = true;
+                              });
+                            } else {
+                              setDialogState(() {
+                                isVerifying = false;
+                                errorMessage = res['message'];
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Nút mô phỏng THẺ SAI (failure flow)
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
+                          label: const Text("Quẹt thẻ NFC khác (Thẻ Không Khớp)", style: TextStyle(color: Colors.orangeAccent)),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.orangeAccent),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () async {
+                            setDialogState(() {
+                              isVerifying = true;
+                              errorMessage = null;
+                            });
+                            
+                            // Gọi API xác thực với mã thẻ sai
+                            final rawId = widget.userData['user_id'] ?? widget.userData['id'];
+                            final int userId = rawId is int ? rawId : int.parse(rawId.toString());
+
+                            final res = await _apiService.updateUserSecure(
+                              userId: userId,
+                              email: newEmail,
+                              phoneNumber: newPhone,
+                              nfcSerial: "WRONG_NFC_SERIAL_999",
+                            );
+
+                            if (res['success'] == true) {
+                              setState(() {
+                                _currentEmail = newEmail;
+                                _currentPhone = newPhone;
+                              });
+                              setDialogState(() {
+                                isVerifying = false;
+                                isSuccess = true;
+                              });
+                            } else {
+                              setDialogState(() {
+                                isVerifying = false;
+                                errorMessage = res['message'];
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        style: TextButton.styleFrom(foregroundColor: Colors.grey),
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text("HỦY BỎ"),
+                      ),
+                    ],
+                  ),
+                ]
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
