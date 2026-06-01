@@ -2,14 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:io';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/book.dart';
 import 'shelf_detail_screen.dart';
 import 'book_detail_screen.dart';
 import '../../services/api_service.dart';
+import '../../services/notification_service.dart';
 import '../widgets/profile_page.dart';
 import '../widgets/scanner_page.dart';
+import '../widgets/explore_page.dart';
+import '../widgets/notifications_page.dart';
 import 'intro_screen.dart';
 
 String optimizeCloudinaryUrl(String url, {int width = 400}) {
@@ -33,15 +38,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
   late Future<List<Book>> _weeklyFeaturedFuture;
-  late Future<List<Map<String, dynamic>>> _categoriesWithBooksFuture;
   late Future<List<Book>> _recommendationsFuture;
-  late Future<List<dynamic>> _combinedLibraryFuture;
   int _selectedIndex = 0;
+  Timer? _notificationCheckTimer;
 
-  void _loadData() {
+  Future<void> _loadData() async {
     setState(() {
       _weeklyFeaturedFuture = _apiService.fetchFeaturedWeeklyBooks();
-      _categoriesWithBooksFuture = _apiService.fetchCategoriesWithBooks();
       
       final rawId = widget.userData?['user_id'] ?? widget.userData?['id'];
       if (rawId != null) {
@@ -50,20 +53,78 @@ class _HomeScreenState extends State<HomeScreen> {
       } else {
         _recommendationsFuture = Future.value([]);
       }
-      
-      _combinedLibraryFuture = Future.wait([
-        _weeklyFeaturedFuture, 
-        _categoriesWithBooksFuture,
-        _recommendationsFuture
-      ]);
     });
+    await Future.wait([_weeklyFeaturedFuture, _recommendationsFuture]);
+    // Kiểm tra thông báo mới mỗi khi reload dữ liệu
+    _checkAndShowNewNotifications();
+  }
+
+  /// Khởi tạo và xin quyền thông báo của điện thoại
+  Future<void> _initNotifications() async {
+    // Chỉ khởi chạy trên Android hoặc iOS để tránh đơ/lỗi trên các môi trường Desktop/Web
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      debugPrint("Bỏ qua cấu hình thông báo điện thoại trên nền tảng này.");
+      return;
+    }
+    
+    try {
+      final hasPermission = await NotificationService().requestPermissions();
+      if (hasPermission) {
+        // Kiểm tra thông báo mới ngay khi cấp quyền thành công
+        _checkAndShowNewNotifications();
+        
+        // Tạo bộ đếm thời gian kiểm tra thông báo mới mỗi 1 phút để cập nhật real-time
+        _notificationCheckTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+          _checkAndShowNewNotifications();
+        });
+      }
+    } catch (e) {
+      debugPrint("Lỗi khởi tạo NotificationService: $e");
+    }
+  }
+
+  /// Kiểm tra thông báo chưa đọc từ backend và đẩy lên pop-up của điện thoại
+  Future<void> _checkAndShowNewNotifications() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+
+    final rawId = widget.userData?['user_id'] ?? widget.userData?['id'];
+    if (rawId == null) return;
+    final int userId = rawId is int ? rawId : int.parse(rawId.toString());
+
+    try {
+      final notifs = await _apiService.fetchUserNotifications(userId);
+      final unreadNotifs = notifs.where((n) => n['is_read'] == false).toList();
+      if (unreadNotifs.isEmpty) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      // Lấy danh sách các ID thông báo đã hiển thị pop-up trên máy
+      final List<String> shownIds = prefs.getStringList('shown_notification_ids') ?? [];
+      final List<String> newShownIds = List.from(shownIds);
+
+      for (var notif in unreadNotifs) {
+        final String notifIdStr = notif['notification_id'].toString();
+        // Nếu thông báo này chưa từng hiển thị pop-up trên điện thoại này
+        if (!shownIds.contains(notifIdStr)) {
+          await NotificationService().showLocalNotification(
+            title: notif['title'] ?? 'Thông báo SmartLib',
+            body: notif['content'] ?? '',
+            payload: notifIdStr,
+          );
+          newShownIds.add(notifIdStr);
+        }
+      }
+
+      // Lưu lại danh sách đã hiện
+      await prefs.setStringList('shown_notification_ids', newShownIds);
+    } catch (e) {
+      debugPrint("Lỗi quét thông báo mới: $e");
+    }
   }
 
   @override
   void initState() {
     super.initState();
     _weeklyFeaturedFuture = _apiService.fetchFeaturedWeeklyBooks();
-    _categoriesWithBooksFuture = _apiService.fetchCategoriesWithBooks();
     
     final rawId = widget.userData?['user_id'] ?? widget.userData?['id'];
     if (rawId != null) {
@@ -72,16 +133,16 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       _recommendationsFuture = Future.value([]);
     }
-    
-    _combinedLibraryFuture = Future.wait([
-      _weeklyFeaturedFuture, 
-      _categoriesWithBooksFuture,
-      _recommendationsFuture
-    ]);
+
+    // Xin quyền và chạy quét thông báo sau khi frame đầu tiên được vẽ để không nghẽn UI
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initNotifications();
+    });
   }
 
   @override
   void dispose() {
+    _notificationCheckTimer?.cancel();
     super.dispose();
   }
 
@@ -89,31 +150,29 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF7DD),
-      appBar: _selectedIndex == 0 
-        ? AppBar(
-            backgroundColor: const Color(0xFF80A1BA),
-            elevation: 0,
-            centerTitle: true,
-            title: const Text(
-              "SmartLib Home",
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-          )
-        : null,
-      body: _selectedIndex == 0
-          ? _buildLibraryView()
-          : _selectedIndex == 1
-              ? ScannerPage(userData: widget.userData)
-              : ProfilePage(
-                  userData: widget.userData ?? {},
-                  onLogout: () {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (context) => const ProfessionalIntroScreen()),
-                      (route) => false,
-                    );
-                  },
-                ),
+      appBar: null,
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: [
+          _buildLibraryView(),
+          ExplorePage(userData: widget.userData),
+          ScannerPage(
+            userData: widget.userData,
+            isActive: _selectedIndex == 2,
+          ),
+          NotificationsPage(userData: widget.userData),
+          ProfilePage(
+            userData: widget.userData ?? {},
+            onLogout: () {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfessionalIntroScreen()),
+                (route) => false,
+              );
+            },
+          ),
+        ],
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -128,9 +187,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
           onTap: (index) {
-            if (index == 0 && _selectedIndex != 0) {
-              _loadData(); // Tải lại dữ liệu khi quay về Thư viện
-            }
             setState(() {
               _selectedIndex = index;
             });
@@ -146,8 +202,16 @@ class _HomeScreenState extends State<HomeScreen> {
               label: "Thư viện",
             ),
             BottomNavigationBarItem(
+              icon: Icon(Icons.explore_rounded),
+              label: "Khám phá",
+            ),
+            BottomNavigationBarItem(
               icon: Icon(Icons.qr_code_scanner_rounded),
               label: "Quét mã",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.notifications_active_rounded),
+              label: "Thông báo",
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_rounded),
@@ -160,15 +224,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildLibraryView() {
-    return FutureBuilder<List<dynamic>>(
-      future: _combinedLibraryFuture,
+    return FutureBuilder<List<Book>>(
+      future: _weeklyFeaturedFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return SizedBox(
-            width: double.infinity,
-            height: double.infinity,
-            child: const Center(child: CircularProgressIndicator(color: Color(0xFF91C4C3))),
-          );
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF91C4C3)));
         }
         if (snapshot.hasError) {
           return Center(child: Text("Lỗi: ${snapshot.error}"));
@@ -177,40 +237,67 @@ class _HomeScreenState extends State<HomeScreen> {
           return const Center(child: Text("Đang tải dữ liệu..."));
         }
 
-        final data = snapshot.data ?? [];
-        if (data.length < 3) return const Center(child: Text("Lỗi dữ liệu"));
-        final weeklyBooks = data[0] as List<Book>;
-        final categoryGroups = data[1] as List<Map<String, dynamic>>;
+        final weeklyBooks = snapshot.data ?? [];
         
         // Lọc những quyển đã có trong weeklyBooks và giới hạn 3 cuốn
         final weeklyIds = weeklyBooks.map((b) => b.id).toSet();
-        final rawRecommendations = data[2] as List<Book>;
-        final userRecommendations = rawRecommendations
-            .where((b) => !weeklyIds.contains(b.id))
-            .take(3)
-            .toList();
 
-        return SingleChildScrollView(
-          key: const ValueKey('library_content_scroll_view'),
-          physics: const BouncingScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Sách được đọc nhiều nhất trong tuần
-              _buildFeaturedSection(weeklyBooks),
+        return RefreshIndicator(
+          color: const Color(0xFF91C4C3),
+          onRefresh: _loadData,
+          child: SingleChildScrollView(
+            key: const ValueKey('library_content_scroll_view'),
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Sách được đọc nhiều nhất trong tuần
+                _buildFeaturedSection(weeklyBooks),
 
-              // 2. Gợi ý dành riêng cho bạn (Chỉ hiện khi có data)
-              if (userRecommendations.isNotEmpty)
-                _buildFixedRecommendationList(
-                  "Gợi ý dành riêng cho bạn", 
-                  userRecommendations,
+                // 2. Gợi ý dành riêng cho bạn (Lazy load)
+                FutureBuilder<List<Book>>(
+                  future: _recommendationsFuture,
+                  builder: (context, recSnapshot) {
+                    if (recSnapshot.connectionState == ConnectionState.waiting) {
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.4),
+                          borderRadius: BorderRadius.circular(25),
+                          border: Border.all(color: const Color(0xFF91C4C3).withOpacity(0.2)),
+                        ),
+                        child: const Center(
+                          child: CircularProgressIndicator(color: Color(0xFF91C4C3)),
+                        ),
+                      );
+                    }
+                    
+                    if (!recSnapshot.hasData || (recSnapshot.data ?? []).isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+
+                    final rawRecommendations = recSnapshot.data!;
+                    final userRecommendations = rawRecommendations
+                        .where((b) => !weeklyIds.contains(b.id))
+                        .take(3)
+                        .toList();
+
+                    if (userRecommendations.isEmpty) return const SizedBox.shrink();
+
+                    return _buildFixedRecommendationList(
+                      "Gợi ý dành riêng cho bạn", 
+                      userRecommendations,
+                    );
+                  },
                 ),
 
-              // 3. Câu châm ngôn mỗi ngày (Cuốn sách mở)
-              const DailyQuoteWidget(),
-              
-              const SizedBox(height: 40),
-            ],
+                // 3. Câu châm ngôn mỗi ngày (Cuốn sách mở)
+                const DailyQuoteWidget(),
+                
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
         );
       },
@@ -525,9 +612,11 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> with SingleTickerPr
       duration: const Duration(milliseconds: 1500),
     );
     
-    // Khởi tạo màu cho cuốn sách đầu tiên
+    // Khởi tạo màu cho cuốn sách đầu tiên (chạy sau frame để không chặn UI thread)
     if (widget.books.isNotEmpty) {
-      _extractColor(widget.books.first, 0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _extractColor(widget.books.first, 0);
+      });
     }
     _sparkleController.forward(from: 0.0);
 
@@ -556,9 +645,11 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> with SingleTickerPr
     
     String finalUrl = '';
     if (book.imageUrl != null && book.imageUrl!.isNotEmpty) {
-      finalUrl = book.imageUrl!;
+      // Tối ưu hóa kích thước ảnh về 100px để tải & trích xuất bảng màu siêu nhanh
+      finalUrl = optimizeCloudinaryUrl(book.imageUrl!, width: 100);
     } else if (book.isbn.isNotEmpty) {
-      finalUrl = 'https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg';
+      // Dùng ảnh kích thước Medium (-M.jpg) thay vì Large (-L.jpg) để trích xuất màu nhẹ hơn
+      finalUrl = 'https://covers.openlibrary.org/b/isbn/${book.isbn}-M.jpg';
     }
 
     if (finalUrl.isNotEmpty) {

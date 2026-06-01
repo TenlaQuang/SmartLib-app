@@ -7,7 +7,8 @@ import 'dart:convert';
 
 class ScannerPage extends StatefulWidget {
   final Map<String, dynamic>? userData;
-  const ScannerPage({super.key, this.userData});
+  final bool isActive;
+  const ScannerPage({super.key, this.userData, this.isActive = true});
 
   @override
   State<ScannerPage> createState() => _ScannerPageState();
@@ -17,6 +18,7 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
   final MobileScannerController _scannerController = MobileScannerController(
     formats: [BarcodeFormat.ean13], // ISBN usually maps to EAN-13
     detectionSpeed: DetectionSpeed.normal,
+    autoStart: false, // Prevent camera from starting automatically in background
   );
   
   final ApiService _apiService = ApiService();
@@ -37,6 +39,18 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
   late Animation<Offset> _slideAnimation;
 
   @override
+  void didUpdateWidget(covariant ScannerPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive != oldWidget.isActive) {
+      if (widget.isActive) {
+        _scannerController.start();
+      } else {
+        _scannerController.stop();
+      }
+    }
+  }
+
+  @override
   void initState() {
     super.initState();
     _animationController = AnimationController(
@@ -53,6 +67,11 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
     
     // Tự động chạy animation khi mở trang
     _animationController.forward();
+
+    // Khởi động camera nếu tab đang active ngay từ đầu
+    if (widget.isActive) {
+      _scannerController.start();
+    }
   }
 
   @override
