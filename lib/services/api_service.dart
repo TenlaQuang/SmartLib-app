@@ -546,5 +546,23 @@ class ApiService {
       return false;
     }
   }
+
+  Future<bool> checkOngoingBorrow(int userId, String isbn) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/users/$userId/check-ongoing-borrow/$isbn'),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes));
+        return data['is_borrowed'] ?? false;
+      }
+      return false;
+    } catch (e) {
+      print("Lỗi checkOngoingBorrow: $e");
+      return false;
+    }
+  }
 }
+
 

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:io';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -61,12 +60,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Khởi tạo và xin quyền thông báo của điện thoại
   Future<void> _initNotifications() async {
-    // Chỉ khởi chạy trên Android hoặc iOS để tránh đơ/lỗi trên các môi trường Desktop/Web
-    if (!Platform.isAndroid && !Platform.isIOS) {
-      debugPrint("Bỏ qua cấu hình thông báo điện thoại trên nền tảng này.");
-      return;
-    }
-    
     try {
       final hasPermission = await NotificationService().requestPermissions();
       if (hasPermission) {
@@ -85,8 +78,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Kiểm tra thông báo chưa đọc từ backend và đẩy lên pop-up của điện thoại
   Future<void> _checkAndShowNewNotifications() async {
-    if (!Platform.isAndroid && !Platform.isIOS) return;
-
     final rawId = widget.userData?['user_id'] ?? widget.userData?['id'];
     if (rawId == null) return;
     final int userId = rawId is int ? rawId : int.parse(rawId.toString());
@@ -97,8 +88,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (unreadNotifs.isEmpty) return;
 
       final prefs = await SharedPreferences.getInstance();
-      // Lấy danh sách các ID thông báo đã hiển thị pop-up trên máy
-      final List<String> shownIds = prefs.getStringList('shown_notification_ids') ?? [];
+      // Lấy danh sách các ID thông báo đã hiển thị pop-up trên máy (cách ly theo userId)
+      final List<String> shownIds = prefs.getStringList('shown_notification_ids_$userId') ?? [];
       final List<String> newShownIds = List.from(shownIds);
 
       for (var notif in unreadNotifs) {
@@ -115,7 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       // Lưu lại danh sách đã hiện
-      await prefs.setStringList('shown_notification_ids', newShownIds);
+      await prefs.setStringList('shown_notification_ids_$userId', newShownIds);
     } catch (e) {
       debugPrint("Lỗi quét thông báo mới: $e");
     }
@@ -163,12 +154,20 @@ class _HomeScreenState extends State<HomeScreen> {
           NotificationsPage(userData: widget.userData),
           ProfilePage(
             userData: widget.userData ?? {},
-            onLogout: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const ProfessionalIntroScreen()),
-                (route) => false,
-              );
+            onLogout: () async {
+              try {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.remove('user_session');
+              } catch (e) {
+                debugPrint("Lỗi xóa phiên: $e");
+              }
+              if (mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProfessionalIntroScreen()),
+                  (route) => false,
+                );
+              }
             },
           ),
         ],

@@ -30,6 +30,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Uint8List? _invoiceImageBytes;
   String? _invoiceFilename;
 
+  DateTime? _selectedBirthDate;
+
+  Future<void> _selectBirthDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(2002), // default student age
+      firstDate: DateTime(1950),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF91C4C3), // header background color
+              onPrimary: Colors.white, // header text color
+              onSurface: Color(0xFF3E2723), // body text color
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF80A1BA), // button text color
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedBirthDate) {
+      setState(() {
+        _selectedBirthDate = picked;
+        _birthYearController.text = "${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}";
+      });
+    }
+  }
+
   Future<void> _createPaymentLink() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
@@ -96,7 +130,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'user_code': _userCodeController.text.trim(),
         'full_name': _fullNameController.text.trim(),
         'gender': _gender,
-        'birth_year': int.tryParse(_birthYearController.text.trim()) ?? 0,
+        'birth_year': _selectedBirthDate?.year ?? 0,
         'phone_number': _phoneController.text.trim(),
         'address': _addressController.text.trim(),
         'email': _emailController.text.trim(),
@@ -226,32 +260,56 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 15),
                 
-                _buildTextField(
-                  controller: _birthYearController,
-                  label: 'Năm sinh',
-                  icon: Icons.calendar_today_outlined,
-                  keyboardType: TextInputType.number,
+                GestureDetector(
+                  onTap: () => _selectBirthDate(context),
+                  child: AbsorbPointer(
+                    child: _buildTextField(
+                      controller: _birthYearController,
+                      label: 'Ngày sinh (*)',
+                      icon: Icons.calendar_today_outlined,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return 'Vui lòng chọn Ngày sinh';
+                        return null;
+                      },
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 15),
                 _buildTextField(
                   controller: _phoneController,
-                  label: 'Số điện thoại',
+                  label: 'Số điện thoại (*)',
                   icon: Icons.phone_outlined,
                   keyboardType: TextInputType.phone,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) return 'Vui lòng nhập Số điện thoại';
+                    final regExp = RegExp(r'^[0-9]{10}$');
+                    if (!regExp.hasMatch(value)) return 'Số điện thoại phải có đúng 10 chữ số';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 15),
                 _buildTextField(
                   controller: _emailController,
-                  label: 'Email',
+                  label: 'Email (*)',
                   icon: Icons.email_outlined,
                   keyboardType: TextInputType.emailAddress,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) return 'Vui lòng nhập Email';
+                    final regExp = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                    if (!regExp.hasMatch(value)) return 'Định dạng email không hợp lệ';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 15),
                 _buildTextField(
                   controller: _addressController,
-                  label: 'Địa chỉ',
+                  label: 'Địa chỉ (*)',
                   icon: Icons.location_on_outlined,
                   maxLines: 2,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) return 'Vui lòng nhập Địa chỉ';
+                    return null;
+                  },
                 ),
                 
                 const SizedBox(height: 40),

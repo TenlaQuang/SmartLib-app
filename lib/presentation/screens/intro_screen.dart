@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:lottie/lottie.dart';
 import 'package:flutter/services.dart';
 import 'package:nfc_manager/nfc_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../../services/api_service.dart';
 import '../widgets/intro_components.dart';
 import 'home_screen.dart';
@@ -22,6 +24,7 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
   late AnimationController _lottieController;
   final ApiService _apiService = ApiService();
   bool _isScanning = false;
+  bool _checkingSession = true;
 
   @override
   void initState() {
@@ -30,6 +33,32 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
       vsync: this,
       duration: const Duration(seconds: 1),
     );
+    _checkSessionPersistence();
+  }
+
+  Future<void> _checkSessionPersistence() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? sessionStr = prefs.getString('user_session');
+      if (sessionStr != null) {
+        final Map<String, dynamic> user = json.decode(sessionStr);
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => HomeScreen(userData: user)),
+          );
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint("Lỗi tải phiên đăng nhập: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _checkingSession = false;
+        });
+      }
+    }
   }
 
   @override
@@ -80,6 +109,16 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
 
   @override
   Widget build(BuildContext context) {
+    if (_checkingSession) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFFFF7DD),
+        body: Center(
+          child: CircularProgressIndicator(
+            color: Color(0xFF91C4C3),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: const Color(0xFFFFF7DD),
       resizeToAvoidBottomInset: false, // Ngăn chặn sọc vàng khi bàn phím hiện lên
@@ -394,7 +433,15 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
     });
   }
 
-  void _showLoginSuccess(String message, Map<String, dynamic> user) {
+  void _showLoginSuccess(String message, Map<String, dynamic> user) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_session', json.encode(user));
+    } catch (e) {
+      debugPrint("Lỗi lưu phiên đăng nhập: $e");
+    }
+
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
