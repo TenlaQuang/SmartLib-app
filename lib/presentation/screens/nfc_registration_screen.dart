@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nfc_manager/nfc_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../../services/api_service.dart';
 import 'register_screen.dart';
 import 'home_screen.dart';
@@ -19,6 +21,14 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
   String? _errorMessage;
   Map<String, dynamic>? _userData;
   bool _isNfcScanning = false;
+  bool _isBottomSheetOpen = false;
+
+  void _safeCloseBottomSheet() {
+    if (_isBottomSheetOpen && mounted) {
+      Navigator.pop(context);
+      _isBottomSheetOpen = false;
+    }
+  }
 
   Future<void> _checkStudentId() async {
     final studentId = _studentIdController.text.trim();
@@ -55,10 +65,18 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
   Future<void> _startNfcScan() async {
     if (_userData == null) return;
 
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     // Check availability
     bool isAvailable = await NfcManager.instance.isAvailable();
     if (!isAvailable) {
-      setState(() => _errorMessage = "Thiết bị của bạn không hỗ trợ NFC hoặc chưa được bật.");
+      setState(() {
+        _errorMessage = "Thiết bị của bạn không hỗ trợ NFC hoặc chưa được bật.";
+        _isLoading = false;
+      });
       return;
     }
 
@@ -79,7 +97,7 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
                                          [];
             
             if (identifier.isEmpty) {
-               if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+               _safeCloseBottomSheet();
                setState(() => _errorMessage = "Không thể đọc được ID của thẻ này.");
                await NfcManager.instance.stopSession();
                setState(() => _isLoading = false);
@@ -92,23 +110,36 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
             await NfcManager.instance.stopSession();
 
             // Close bottom sheet
-            if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+            _safeCloseBottomSheet();
 
             final success = await _apiService.assignNfc(_userData!['user_id'], nfcSerial);
             if (success) {
-              if (mounted) {
-                _showSuccessDialog();
+              try {
+                // Tự động đăng nhập để lấy thông tin userData đầy đủ
+                final loginResult = await _apiService.loginNfc(nfcSerial);
+                if (mounted) {
+                  _showSuccessDialog(loginResult['user']);
+                }
+              } catch (e) {
+                // Fallback nếu login fail thì vẫn mở dialog với user_id cơ bản
+                if (mounted) {
+                  _showSuccessDialog({
+                    'user_id': _userData!['user_id'],
+                    'full_name': _userData!['full_name'],
+                  });
+                }
               }
             }
           } catch (e) {
-            if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-            setState(() => _errorMessage = "Lỗi khi xử lý thẻ: $e");
+            _safeCloseBottomSheet();
+            final cleanMessage = e.toString().replaceFirst("Exception: ", "");
+            setState(() => _errorMessage = cleanMessage);
           } finally {
             if (mounted) setState(() => _isLoading = false);
           }
         },
         onError: (error) async {
-          if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+          _safeCloseBottomSheet();
           setState(() {
             _errorMessage = "Lỗi quét NFC: $error";
             _isLoading = false;
@@ -116,7 +147,7 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
         },
       );
     } catch (e) {
-      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+      _safeCloseBottomSheet();
       setState(() {
         _errorMessage = "Không thể khởi động trình quét NFC: $e";
         _isLoading = false;
@@ -124,7 +155,14 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
     }
   }
 
-  void _showSuccessDialog() {
+  void _showSuccessDialog(Map<String, dynamic> user) {
+    // Lưu phiên đăng nhập tự động
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('user_session', json.encode(user));
+    }).catchError((e) {
+      debugPrint("Lỗi lưu phiên đăng nhập: $e");
+    });
+
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
@@ -188,7 +226,7 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
                             onPressed: () {
                               Navigator.of(context).pop();
                               Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(builder: (context) => const HomeScreen()),
+                                MaterialPageRoute(builder: (context) => HomeScreen(userData: user)),
                               );
                             },
                             style: ElevatedButton.styleFrom(
@@ -213,6 +251,7 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
   }
 
   void _showScanningBottomSheet() {
+    _isBottomSheetOpen = true;
     showModalBottomSheet(
       context: context,
       isDismissible: true,
@@ -266,8 +305,7 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
                   const Spacer(),
                   TextButton(
                     onPressed: () {
-                      NfcManager.instance.stopSession();
-                      Navigator.pop(context);
+                      _safeCloseBottomSheet();
                     },
                     child: const Text("Hủy bỏ", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
                   ),
@@ -278,6 +316,7 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
         );
       },
     ).then((_) {
+      _isBottomSheetOpen = false;
       // Ensure session is stopped if user dismisses bottom sheet
       NfcManager.instance.stopSession();
     });
@@ -312,7 +351,7 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
             ] else ...[
               _buildNfcScanningSection(),
             ],
-            if (_errorMessage != null && _userData?['status'] != 'pending_nfc') ...[
+            if (_errorMessage != null) ...[
               const SizedBox(height: 24),
               _buildErrorSection(),
             ],

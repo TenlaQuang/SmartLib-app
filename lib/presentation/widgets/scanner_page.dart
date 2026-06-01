@@ -84,6 +84,17 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
   void _onDetect(BarcodeCapture capture) async {
     if (_isProcessing) return;
 
+    final rawId = widget.userData?['user_id'] ?? widget.userData?['id'];
+    if (rawId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Lỗi: Không tìm thấy thông tin đăng nhập!"), backgroundColor: Colors.redAccent),
+        );
+      }
+      return;
+    }
+    final int userId = rawId is int ? rawId : int.parse(rawId.toString());
+
     final List<Barcode> barcodes = capture.barcodes;
     String? newIsbn;
 
@@ -110,15 +121,28 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
         final books = await _apiService.fetchBooks(search: newIsbn);
         if (books.isNotEmpty) {
           if (_isReturnMode) {
-            // Chế độ Trả sách: cho phép quét bất kỳ sách nào có trong DB
-            // (Backend sẽ kiểm tra xem User có đang mượn sách này không)
-            final book = books.first;
-            setState(() {
+            // Chế độ Trả sách: Kiểm tra xem User có đang mượn sách này không
+            final bool isBorrowed = await _apiService.checkOngoingBorrow(userId, newIsbn!);
+            if (isBorrowed) {
+              final book = books.first;
+              setState(() {
+                _scannedIsbns.add(newIsbn!);
+                _scannedBooks.add(book);
+              });
+              SystemSound.play(SystemSoundType.click);
+              HapticFeedback.vibrate();
+            } else {
               _scannedIsbns.add(newIsbn!);
-              _scannedBooks.add(book);
-            });
-            SystemSound.play(SystemSoundType.click);
-            HapticFeedback.vibrate();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text("Bạn không đang mượn cuốn sách '${books.first.title}' này!"),
+                    duration: const Duration(seconds: 3),
+                    backgroundColor: Colors.redAccent,
+                  ),
+                );
+              }
+            }
           } else {
             // Chế độ Mượn sách: Chỉ lấy những cuốn sách đang 'available'
             final availableBooks = books.where((b) => b.status == 'available').toList();
