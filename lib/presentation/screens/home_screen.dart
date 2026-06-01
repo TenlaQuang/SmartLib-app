@@ -2,15 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:io';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/book.dart';
 import 'shelf_detail_screen.dart';
 import 'book_detail_screen.dart';
 import '../../services/api_service.dart';
+import '../../services/notification_service.dart';
 import '../widgets/profile_page.dart';
 import '../widgets/scanner_page.dart';
 import '../widgets/explore_page.dart';
+import '../widgets/notifications_page.dart';
 import 'intro_screen.dart';
 
 String optimizeCloudinaryUrl(String url, {int width = 400}) {
@@ -36,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Book>> _weeklyFeaturedFuture;
   late Future<List<Book>> _recommendationsFuture;
   int _selectedIndex = 0;
+  Timer? _notificationCheckTimer;
 
   Future<void> _loadData() async {
     setState(() {
@@ -50,6 +55,70 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
     await Future.wait([_weeklyFeaturedFuture, _recommendationsFuture]);
+    // Kiểm tra thông báo mới mỗi khi reload dữ liệu
+    _checkAndShowNewNotifications();
+  }
+
+  /// Khởi tạo và xin quyền thông báo của điện thoại
+  Future<void> _initNotifications() async {
+    // Chỉ khởi chạy trên Android hoặc iOS để tránh đơ/lỗi trên các môi trường Desktop/Web
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      debugPrint("Bỏ qua cấu hình thông báo điện thoại trên nền tảng này.");
+      return;
+    }
+    
+    try {
+      final hasPermission = await NotificationService().requestPermissions();
+      if (hasPermission) {
+        // Kiểm tra thông báo mới ngay khi cấp quyền thành công
+        _checkAndShowNewNotifications();
+        
+        // Tạo bộ đếm thời gian kiểm tra thông báo mới mỗi 1 phút để cập nhật real-time
+        _notificationCheckTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+          _checkAndShowNewNotifications();
+        });
+      }
+    } catch (e) {
+      debugPrint("Lỗi khởi tạo NotificationService: $e");
+    }
+  }
+
+  /// Kiểm tra thông báo chưa đọc từ backend và đẩy lên pop-up của điện thoại
+  Future<void> _checkAndShowNewNotifications() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+
+    final rawId = widget.userData?['user_id'] ?? widget.userData?['id'];
+    if (rawId == null) return;
+    final int userId = rawId is int ? rawId : int.parse(rawId.toString());
+
+    try {
+      final notifs = await _apiService.fetchUserNotifications(userId);
+      final unreadNotifs = notifs.where((n) => n['is_read'] == false).toList();
+      if (unreadNotifs.isEmpty) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      // Lấy danh sách các ID thông báo đã hiển thị pop-up trên máy
+      final List<String> shownIds = prefs.getStringList('shown_notification_ids') ?? [];
+      final List<String> newShownIds = List.from(shownIds);
+
+      for (var notif in unreadNotifs) {
+        final String notifIdStr = notif['notification_id'].toString();
+        // Nếu thông báo này chưa từng hiển thị pop-up trên điện thoại này
+        if (!shownIds.contains(notifIdStr)) {
+          await NotificationService().showLocalNotification(
+            title: notif['title'] ?? 'Thông báo SmartLib',
+            body: notif['content'] ?? '',
+            payload: notifIdStr,
+          );
+          newShownIds.add(notifIdStr);
+        }
+      }
+
+      // Lưu lại danh sách đã hiện
+      await prefs.setStringList('shown_notification_ids', newShownIds);
+    } catch (e) {
+      debugPrint("Lỗi quét thông báo mới: $e");
+    }
   }
 
   @override
@@ -64,10 +133,16 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       _recommendationsFuture = Future.value([]);
     }
+
+    // Xin quyền và chạy quét thông báo sau khi frame đầu tiên được vẽ để không nghẽn UI
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initNotifications();
+    });
   }
 
   @override
   void dispose() {
+    _notificationCheckTimer?.cancel();
     super.dispose();
   }
 
@@ -85,6 +160,7 @@ class _HomeScreenState extends State<HomeScreen> {
             userData: widget.userData,
             isActive: _selectedIndex == 2,
           ),
+          NotificationsPage(userData: widget.userData),
           ProfilePage(
             userData: widget.userData ?? {},
             onLogout: () {
@@ -132,6 +208,10 @@ class _HomeScreenState extends State<HomeScreen> {
             BottomNavigationBarItem(
               icon: Icon(Icons.qr_code_scanner_rounded),
               label: "Quét mã",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.notifications_active_rounded),
+              label: "Thông báo",
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_rounded),

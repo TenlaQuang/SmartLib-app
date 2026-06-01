@@ -504,5 +504,47 @@ class ApiService {
       return {'success': false, 'message': 'Lỗi kết nối: $e'};
     }
   }
+
+  // --- Notification APIs ---
+  Future<List<Map<String, dynamic>>> fetchUserNotifications(int userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/notifications/$userId'),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+        return data.cast<Map<String, dynamic>>();
+      }
+      return [];
+    } catch (e) {
+      print("Lỗi fetchUserNotifications: $e");
+      return [];
+    }
+  }
+
+  Future<bool> markNotificationAsRead(int notificationId) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/notifications/$notificationId/read'),
+      ).timeout(const Duration(seconds: 10));
+      return response.statusCode == 200;
+    } catch (e) {
+      print("Lỗi markNotificationAsRead: $e");
+      return false;
+    }
+  }
+
+  Future<bool> markAllNotificationsAsRead(int userId) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/notifications/user/$userId/read-all'),
+      ).timeout(const Duration(seconds: 10));
+      return response.statusCode == 200;
+    } catch (e) {
+      print("Lỗi markAllNotificationsAsRead: $e");
+      return false;
+    }
+  }
 }
 
