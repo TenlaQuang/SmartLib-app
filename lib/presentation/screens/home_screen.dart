@@ -40,6 +40,8 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Book>> _recommendationsFuture;
   int _selectedIndex = 0;
   Timer? _notificationCheckTimer;
+  int _profileRefreshKey = 0;
+  int _notificationsRefreshKey = 0;
 
   Future<void> _loadData() async {
     setState(() {
@@ -150,9 +152,20 @@ class _HomeScreenState extends State<HomeScreen> {
           ScannerPage(
             userData: widget.userData,
             isActive: _selectedIndex == 2,
+            onTransactionComplete: () {
+              setState(() {
+                _profileRefreshKey++;
+                _notificationsRefreshKey++;
+                _loadData();
+              });
+            },
           ),
-          NotificationsPage(userData: widget.userData),
+          NotificationsPage(
+            key: ValueKey(_notificationsRefreshKey),
+            userData: widget.userData,
+          ),
           ProfilePage(
+            key: ValueKey(_profileRefreshKey),
             userData: widget.userData ?? {},
             onLogout: () async {
               try {
@@ -188,6 +201,13 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: (index) {
             setState(() {
               _selectedIndex = index;
+              if (index == 3) {
+                _notificationsRefreshKey++;
+              } else if (index == 4) {
+                _profileRefreshKey++;
+              } else if (index == 0) {
+                _loadData();
+              }
             });
           },
           backgroundColor: Colors.white,

@@ -339,9 +339,13 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               opacity: _fadeAnimation,
               child: SlideTransition(
                 position: _slideUpAnimation,
-                child: CustomScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  slivers: [
+                child: RefreshIndicator(
+                  color: const Color(0xFF91C4C3),
+                  backgroundColor: const Color(0xFFFFF7DD),
+                  onRefresh: _loadActivity,
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                    slivers: [
                 // Transparent space for the top header area
                 SliverToBoxAdapter(
                   child: SizedBox(height: MediaQuery.of(context).size.height * 0.18),
@@ -471,6 +475,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                   ),
                 ),
               ],
+            ),
             ),
             ),
             ),
