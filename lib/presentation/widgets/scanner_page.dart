@@ -8,7 +8,13 @@ import 'dart:convert';
 class ScannerPage extends StatefulWidget {
   final Map<String, dynamic>? userData;
   final bool isActive;
-  const ScannerPage({super.key, this.userData, this.isActive = true});
+  final VoidCallback? onTransactionComplete;
+  const ScannerPage({
+    super.key, 
+    this.userData, 
+    this.isActive = true,
+    this.onTransactionComplete,
+  });
 
   @override
   State<ScannerPage> createState() => _ScannerPageState();
@@ -321,6 +327,9 @@ class _ScannerPageState extends State<ScannerPage> with SingleTickerProviderStat
         _scannedIsbns.clear();
         _scannedBooks.clear();
       });
+
+      // Kích hoạt callback khi giao dịch thành công
+      widget.onTransactionComplete?.call();
     }
   }
 
