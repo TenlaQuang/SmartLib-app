@@ -262,7 +262,7 @@ class _ProfessionalIntroScreenState extends State<ProfessionalIntroScreen> with 
       NfcManager.instance.startSession(
         onDiscovered: (NfcTag tag) async {
           try {
-            await HapticFeedback.heavyImpact();
+            await HapticFeedback.vibrate();
             final List<int> identifier = tag.data['isodep']?['identifier'] ?? 
                                          tag.data['nfca']?['identifier'] ?? 
                                          tag.data['mifareultralight']?['identifier'] ??
