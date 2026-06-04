@@ -87,7 +87,7 @@ class _NfcRegistrationScreenState extends State<NfcRegistrationScreen> {
       NfcManager.instance.startSession(
         onDiscovered: (NfcTag tag) async {
           try {
-            await HapticFeedback.heavyImpact();
+            await HapticFeedback.vibrate();
             
             // Extract identifier
             final List<int> identifier = tag.data['isodep']?['identifier'] ?? 
